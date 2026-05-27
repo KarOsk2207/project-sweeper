@@ -1,0 +1,21 @@
+﻿# Raylib
+*.dll
+*.exe
+*.o
+*.out
+
+# Build folders
+build/
+Debug/
+Release/
+
+# Visual Studio files
+.vs/
+*.vcxproj
+*.vcxproj.filters
+*.sln
+*.user
+
+# Editor files
+.vscode/
+.idea/

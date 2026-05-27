@@ -1,2 +1,21 @@
-# project-sweeper
-definitely one of the games of all time
+﻿# Sweeper
+
+ногозадачный сапёр с уникальными врагами и системой рангов.
+
+## Технологический стек
+- C (C11)
+- Raylib 6.0
+- MinGW-w64 (GCC)
+
+## Статус проекта
+ разработке
+
+## апуск
+1. Установите MinGW-w64 и Raylib 6.0.
+2. Склонируйте репозиторий.
+3. Убедитесь, что путь к Raylib в Makefile корректен.
+4. ыполните `mingw32-make`.
+5. апустите `./sweeper.exe`.
+
+## Тесты
+`mingw32-make test`
