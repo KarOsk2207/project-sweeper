@@ -1,4 +1,6 @@
 ﻿#include "raylib.h"
+#include "board.h"
+#include <stdio.h>   // для sprintf, если понадобится
 
 // ---------------------------------------------------------------------------
 // Перечисление экранов
@@ -21,7 +23,7 @@ typedef struct {
 } Button;
 
 // ---------------------------------------------------------------------------
-// Параметры игры (заполняются при выборе сложности)
+// Параметры игры
 typedef struct {
     int rows;
     int cols;
@@ -31,23 +33,31 @@ typedef struct {
 // ---------------------------------------------------------------------------
 // Глобальные переменные
 GameScreen currentScreen = SCREEN_MENU;
-GameConfig gameConfig;                     // текущие настройки сложности
+GameConfig gameConfig;
+Board gameBoard;
+bool gameLost = false;
+bool gameWon  = false;
 
-// Кнопки главного меню
+// Кнопки меню
 Button newGameBtn;
 Button exitBtn;
 
-// Кнопки меню выбора сложности
+// Кнопки сложности
 Button easyBtn;
 Button mediumBtn;
 Button hardBtn;
 Button backBtn;
 
 // ---------------------------------------------------------------------------
+// Константы отрисовки
+#define CELL_SIZE  30
+#define GRID_X     50
+#define GRID_Y     50
+
+// ---------------------------------------------------------------------------
 // Инициализация кнопок меню
 void InitMenuButtons(void) {
-    float btnWidth = 200;
-    float btnHeight = 50;
+    float btnWidth = 200, btnHeight = 50;
     float centerX = (800 - btnWidth) / 2.0f;
 
     newGameBtn.bounds = (Rectangle){ centerX, 250, btnWidth, btnHeight };
@@ -61,11 +71,8 @@ void InitMenuButtons(void) {
     exitBtn.hoverColor = GRAY;
 }
 
-// ---------------------------------------------------------------------------
-// Инициализация кнопок выбора сложности
 void InitDifficultyButtons(void) {
-    float btnWidth = 220;
-    float btnHeight = 50;
+    float btnWidth = 220, btnHeight = 50;
     float centerX = (800 - btnWidth) / 2.0f;
 
     easyBtn.bounds = (Rectangle){ centerX, 200, btnWidth, btnHeight };
@@ -90,15 +97,14 @@ void InitDifficultyButtons(void) {
 }
 
 // ---------------------------------------------------------------------------
-// Вспомогательные функции для кнопок
+// Вспомогательные функции кнопок
 bool IsMouseOverButton(Button btn) {
-    Vector2 mouse = GetMousePosition();
-    return CheckCollisionPointRec(mouse, btn.bounds);
+    return CheckCollisionPointRec(GetMousePosition(), btn.bounds);
 }
 
 void DrawButton(Button btn) {
-    Color currentColor = IsMouseOverButton(btn) ? btn.hoverColor : btn.color;
-    DrawRectangleRec(btn.bounds, currentColor);
+    Color color = IsMouseOverButton(btn) ? btn.hoverColor : btn.color;
+    DrawRectangleRec(btn.bounds, color);
     DrawRectangleLinesEx(btn.bounds, 2, WHITE);
 
     int textWidth = MeasureText(btn.text, 20);
@@ -108,7 +114,7 @@ void DrawButton(Button btn) {
 }
 
 // ---------------------------------------------------------------------------
-// Обновление и отрисовка главного меню
+// Главное меню
 void UpdateMenu(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         if (IsMouseOverButton(newGameBtn)) {
@@ -127,25 +133,28 @@ void DrawMenu(void) {
 }
 
 // ---------------------------------------------------------------------------
-// Обновление и отрисовка меню выбора сложности
+// Меню выбора сложности
 void UpdateDifficulty(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         if (IsMouseOverButton(easyBtn)) {
-            gameConfig.rows = 9;
-            gameConfig.cols = 9;
-            gameConfig.mines = 10;
+            gameConfig.rows = 9; gameConfig.cols = 9; gameConfig.mines = 10;
+            BoardInit(&gameBoard, gameConfig.rows, gameConfig.cols, gameConfig.mines);
+            gameLost = false;
+            gameWon = false;
             currentScreen = SCREEN_GAMEPLAY;
         }
         if (IsMouseOverButton(mediumBtn)) {
-            gameConfig.rows = 16;
-            gameConfig.cols = 16;
-            gameConfig.mines = 40;
+            gameConfig.rows = 16; gameConfig.cols = 16; gameConfig.mines = 40;
+            BoardInit(&gameBoard, gameConfig.rows, gameConfig.cols, gameConfig.mines);
+            gameLost = false;
+            gameWon = false;
             currentScreen = SCREEN_GAMEPLAY;
         }
         if (IsMouseOverButton(hardBtn)) {
-            gameConfig.rows = 16;
-            gameConfig.cols = 30;
-            gameConfig.mines = 99;
+            gameConfig.rows = 16; gameConfig.cols = 30; gameConfig.mines = 99;
+            BoardInit(&gameBoard, gameConfig.rows, gameConfig.cols, gameConfig.mines);
+            gameLost = false;
+            gameWon = false;
             currentScreen = SCREEN_GAMEPLAY;
         }
         if (IsMouseOverButton(backBtn)) {
@@ -163,15 +172,90 @@ void DrawDifficulty(void) {
 }
 
 // ---------------------------------------------------------------------------
-// Заглушки для остальных экранов
+// Игровой процесс (Сапёр)
 void UpdateGameplay(void) {
+    if (gameLost || gameWon) {
+        // После завершения игры нажатие Enter возвращает в меню
+        if (IsKeyPressed(KEY_ENTER)) currentScreen = SCREEN_MENU;
+        return;
+    }
+
+    // Выход по Escape
     if (IsKeyPressed(KEY_ESCAPE)) currentScreen = SCREEN_MENU;
+
+    // Обработка кликов мыши
+    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
+        Vector2 mouse = GetMousePosition();
+        // Переводим координаты мыши в индексы клетки
+        int col = (int)((mouse.x - GRID_X) / CELL_SIZE);
+        int row = (int)((mouse.y - GRID_Y) / CELL_SIZE);
+
+        if (row >= 0 && row < gameBoard.rows && col >= 0 && col < gameBoard.cols) {
+            if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                // Левый клик: открываем клетку
+                if (!gameBoard.firstClickDone) {
+                    // Первый клик: расставляем мины (безопасно)
+                    BoardPlaceMines(&gameBoard, row, col);
+                    BoardCalculateNumbers(&gameBoard);
+                }
+                bool hitMine = BoardReveal(&gameBoard, row, col);
+                if (hitMine) {
+                    gameLost = true;
+                } else {
+                    gameWon = BoardCheckVictory(&gameBoard);
+                }
+            } else if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
+                // Правый клик: флаг
+                BoardToggleFlag(&gameBoard, row, col);
+            }
+        }
+    }
 }
 
 void DrawGameplay(void) {
-    DrawText("GAMEPLAY (press ESC to return)", 100, 100, 30, WHITE);
+    // Рисуем сетку
+    for (int r = 0; r < gameBoard.rows; r++) {
+        for (int c = 0; c < gameBoard.cols; c++) {
+            Rectangle cellRect = {
+                GRID_X + c * CELL_SIZE,
+                GRID_Y + r * CELL_SIZE,
+                CELL_SIZE, CELL_SIZE
+            };
+
+            Cell cell = gameBoard.cells[r][c];
+
+            if (cell.state == CELL_HIDDEN) {
+                DrawRectangleRec(cellRect, LIGHTGRAY);
+                DrawRectangleLines( (int)cellRect.x, (int)cellRect.y, CELL_SIZE, CELL_SIZE, GRAY);
+            } else if (cell.state == CELL_REVEALED) {
+                DrawRectangleRec(cellRect, WHITE);
+                DrawRectangleLines( (int)cellRect.x, (int)cellRect.y, CELL_SIZE, CELL_SIZE, GRAY);
+
+                if (cell.hasMine) {
+                    DrawText("*", (int)(cellRect.x + 8), (int)(cellRect.y + 5), 24, RED);
+                } else if (cell.adjacentMines > 0) {
+                    char num[4];
+                    sprintf(num, "%d", cell.adjacentMines);
+                    DrawText(num, (int)(cellRect.x + 8), (int)(cellRect.y + 5), 24, DARKBLUE);
+                }
+            } else if (cell.state == CELL_FLAGGED) {
+                DrawRectangleRec(cellRect, LIGHTGRAY);
+                DrawRectangleLines( (int)cellRect.x, (int)cellRect.y, CELL_SIZE, CELL_SIZE, GRAY);
+                DrawText("F", (int)(cellRect.x + 8), (int)(cellRect.y + 5), 24, RED);
+            }
+        }
+    }
+
+    // Сообщения о победе/поражении
+    if (gameLost) {
+        DrawText("YOU LOST! (ENTER to menu)", 200, 20, 30, RED);
+    } else if (gameWon) {
+        DrawText("YOU WIN! (ENTER to menu)", 200, 20, 30, GREEN);
+    }
 }
 
+// ---------------------------------------------------------------------------
+// Заглушки для мини-игр и финалов
 void UpdateMinigame(void) {
     if (IsKeyPressed(KEY_ESCAPE)) currentScreen = SCREEN_GAMEPLAY;
 }
@@ -207,7 +291,7 @@ int main(void)
 
     while (!WindowShouldClose())
     {
-        // --- Обновление ---
+        // Обновление текущего экрана
         switch (currentScreen) {
             case SCREEN_MENU:       UpdateMenu();       break;
             case SCREEN_DIFFICULTY: UpdateDifficulty(); break;
@@ -217,7 +301,7 @@ int main(void)
             case SCREEN_VICTORY:    UpdateVictory();    break;
         }
 
-        // --- Отрисовка ---
+        // Отрисовка
         BeginDrawing();
         ClearBackground(DARKGRAY);
 

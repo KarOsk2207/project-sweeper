@@ -4,11 +4,20 @@ RAYLIB_PATH = C:/raylib-6.0
 INCLUDES = -I$(RAYLIB_PATH)/include
 LIBS = -L$(RAYLIB_PATH)/lib -lraylib -lopengl32 -lgdi32 -lwinmm -static
 
-all: sweeper
+SRC = main.c board.c
+OBJ = main.o board.o
+TARGET = sweeper.exe
 
-sweeper: main.c
-	$(CC) main.c $(INCLUDES) $(LIBS) $(CFLAGS) -o sweeper.exe
+all: $(TARGET)
+
+$(TARGET): $(OBJ)
+	$(CC) $(OBJ) $(LIBS) -o $(TARGET)
+
+%.o: %.c
+	$(CC) -c $(INCLUDES) $(CFLAGS) $< -o $@
+
 test:
 	@echo "No tests yet"
+
 clean:
-	rm -f sweeper.exe
+	rm -f $(OBJ) $(TARGET)
