@@ -86,6 +86,10 @@ double jumpscareSpawnTimer = 0.0;
 bool jumpscareSpawnCooldown = false;
 Rectangle jumpscareCubeRect = { 0, 0, 0, 0 };
 
+// Счётчик активных динамических врагов
+int activeDynamicEnemies = 0;
+#define MAX_DYNAMIC_ENEMIES 3
+
 Button newGameBtn;
 Button settingsBtn;
 Button statsBtn;
@@ -178,6 +182,7 @@ void ResetGame(void) {
     jumpscareSpawnCooldown = false;
     jumpscareCooldownTimer = 0.0;
     jumpscareSpawnTimer = 0.0;
+    activeDynamicEnemies = 0;
     RecalculateGrid();
 }
 
@@ -303,8 +308,8 @@ void UpdateCheatInput(void) {
             cheatActive = !cheatActive;
             inputBuffer[0] = '\0';
             if (cheatActive) {
-                qteActive = false;
-                jumpscareActive = false;
+                if (qteActive) { qteActive = false; activeDynamicEnemies--; }
+                if (jumpscareActive) { jumpscareActive = false; activeDynamicEnemies--; }
             }
         }
     }
@@ -365,6 +370,7 @@ void UpdatePhaseEnemy(void) {
 
 void UpdateQTE(void) {
     if (cheatActive) {
+        if (qteActive) { activeDynamicEnemies--; }
         qteActive = false;
         qteSpawnCooldown = false;
         qteCooldownTimer = 0.0;
@@ -388,7 +394,7 @@ void UpdateQTE(void) {
         qteSpawnTimer += dt;
         if (qteSpawnTimer >= 7.0) {
             qteSpawnTimer = 0.0;
-            if ((rand() % 100) < 20) {
+            if (activeDynamicEnemies < MAX_DYNAMIC_ENEMIES && (rand() % 100) < 20) {
                 qteActive = true;
                 qteCurrentIndex = 0;
                 qteTimeLeft = 9.0;
@@ -399,6 +405,7 @@ void UpdateQTE(void) {
                 qteWindowRect.y = (float)(rand() % (GetScreenHeight() - 100));
                 qteWindowRect.width = 200;
                 qteWindowRect.height = 80;
+                activeDynamicEnemies++;
             }
         }
     } else {
@@ -417,6 +424,7 @@ void UpdateQTE(void) {
                     qteActive = false;
                     qteSpawnCooldown = true;
                     qteCooldownTimer = 10.0;
+                    activeDynamicEnemies--;
                 }
             }
         }
@@ -425,12 +433,14 @@ void UpdateQTE(void) {
         if (qteTimeLeft <= 0.0) {
             if (!gameLost) gameLost = true;
             qteActive = false;
+            activeDynamicEnemies--;
         }
     }
 }
 
 void UpdateJumpscare(void) {
     if (cheatActive) {
+        if (jumpscareActive) { activeDynamicEnemies--; }
         jumpscareActive = false;
         jumpscareSpawnCooldown = false;
         jumpscareCooldownTimer = 0.0;
@@ -454,10 +464,11 @@ void UpdateJumpscare(void) {
         jumpscareSpawnTimer += dt;
         if (jumpscareSpawnTimer >= 7.0) {
             jumpscareSpawnTimer = 0.0;
-            if ((rand() % 100) < 20) {
+            if (activeDynamicEnemies < MAX_DYNAMIC_ENEMIES && (rand() % 100) < 20) {
                 jumpscareActive = true;
                 jumpscarePhase = 0;
                 jumpscareTimer = 0.0;
+                activeDynamicEnemies++;
             }
         }
     } else {
@@ -479,6 +490,7 @@ void UpdateJumpscare(void) {
                 if (jumpscareTimer >= 2.0) {
                     if (!gameLost) gameLost = true;
                     jumpscareActive = false;
+                    activeDynamicEnemies--;
                 }
                 break;
         }
@@ -494,27 +506,20 @@ void DrawJumpscare(void) {
     if (jumpscarePhase == 0) {
         DrawText("PREPARE", w/2 - MeasureText("PREPARE", 40)/2, h - 50, 40, WHITE);
     } else {
-        // азмер куба: от 0 до 70% экрана на фазе 1, и от 70% до 90% на фазе 2
         float size = 0.0f;
         if (jumpscarePhase == 1) {
-            // астет от 0 до 70%
-            float t = (float)(jumpscareTimer / 2.0); // 0..1
+            float t = (float)(jumpscareTimer / 2.0);
             if (t > 1.0f) t = 1.0f;
             size = t * (w * 0.7f);
-        } else { // phase 2
-            // астет от 70% до 90%
+        } else {
             float t = (float)(jumpscareTimer / 2.0);
             if (t > 1.0f) t = 1.0f;
             size = w * 0.7f + t * (w * 0.2f);
         }
 
-        // Центр экрана
         float x = w/2 - size/2;
         float y = h/2 - size/2;
-
-        // Цвет: желтый на фазе 1, красный на фазе 2
         Color cubeColor = (jumpscarePhase == 1) ? YELLOW : RED;
-
         DrawRectangle((int)x, (int)y, (int)size, (int)size, cubeColor);
     }
 }
@@ -596,6 +601,7 @@ void UpdateGameplay(void) {
             jumpscareActive = false;
             jumpscareSpawnCooldown = true;
             jumpscareCooldownTimer = 10.0;
+            activeDynamicEnemies--;
             return;
         }
     }
