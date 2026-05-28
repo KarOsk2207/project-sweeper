@@ -86,7 +86,15 @@ double jumpscareSpawnTimer = 0.0;
 bool jumpscareSpawnCooldown = false;
 Rectangle jumpscareCubeRect = { 0, 0, 0, 0 };
 
-// Счётчик активных динамических врагов
+// Spam враг
+bool spamActive = false;
+int spamCountdown = 5;
+int spamProgress = 0;
+double spamTickTimer = 0.0;
+double spamCooldownTimer = 0.0;
+double spamSpawnTimer = 0.0;
+bool spamSpawnCooldown = false;
+
 int activeDynamicEnemies = 0;
 #define MAX_DYNAMIC_ENEMIES 3
 
@@ -120,6 +128,10 @@ Color cellColorOptions[4] = {
     { 180, 200, 255, 255 },
     { 180, 255, 180, 255 }
 };
+
+// Прототипы функций отрисовки врагов, чтобы избежать ошибок компиляции
+void DrawJumpscare(void);
+void DrawSpam(void);
 
 void SaveData(void) {
     FILE *f = fopen("sweeper.dat", "w");
@@ -182,6 +194,10 @@ void ResetGame(void) {
     jumpscareSpawnCooldown = false;
     jumpscareCooldownTimer = 0.0;
     jumpscareSpawnTimer = 0.0;
+    spamActive = false;
+    spamSpawnCooldown = false;
+    spamCooldownTimer = 0.0;
+    spamSpawnTimer = 0.0;
     activeDynamicEnemies = 0;
     RecalculateGrid();
 }
@@ -310,6 +326,7 @@ void UpdateCheatInput(void) {
             if (cheatActive) {
                 if (qteActive) { qteActive = false; activeDynamicEnemies--; }
                 if (jumpscareActive) { jumpscareActive = false; activeDynamicEnemies--; }
+                if (spamActive) { spamActive = false; activeDynamicEnemies--; }
             }
         }
     }
@@ -497,6 +514,77 @@ void UpdateJumpscare(void) {
     }
 }
 
+void UpdateSpam(void) {
+    if (cheatActive) {
+        if (spamActive) { activeDynamicEnemies--; }
+        spamActive = false;
+        spamSpawnCooldown = false;
+        spamCooldownTimer = 0.0;
+        spamSpawnTimer = 0.0;
+        return;
+    }
+    if (gameLost || gameWon) return;
+
+    float dt = GetFrameTime();
+
+    if (spamSpawnCooldown) {
+        spamCooldownTimer -= dt;
+        if (spamCooldownTimer <= 0.0) {
+            spamSpawnCooldown = false;
+            spamSpawnTimer = 0.0;
+        }
+        return;
+    }
+
+    if (!spamActive) {
+        spamSpawnTimer += dt;
+        if (spamSpawnTimer >= 7.0) {
+            spamSpawnTimer = 0.0;
+            if (activeDynamicEnemies < MAX_DYNAMIC_ENEMIES && (rand() % 100) < 20) {
+                spamActive = true;
+                spamCountdown = 5;
+                spamProgress = 0;
+                spamTickTimer = 0.0;
+                activeDynamicEnemies++;
+            }
+        }
+    } else {
+        if (IsKeyPressed(KEY_LEFT_ALT) || IsKeyPressed(KEY_RIGHT_ALT)) {
+            spamProgress += 7;
+            if (spamProgress > 100) spamProgress = 100;
+            if (spamProgress >= 100) {
+                spamActive = false;
+                spamSpawnCooldown = true;
+                spamCooldownTimer = 10.0;
+                activeDynamicEnemies--;
+                return;
+            }
+        }
+
+        spamTickTimer += dt;
+        if (spamTickTimer >= 1.0) {
+            spamTickTimer -= 1.0;
+            spamCountdown--;
+            if (spamCountdown < 0) {
+                if (!gameLost) gameLost = true;
+                spamActive = false;
+                activeDynamicEnemies--;
+            }
+        }
+    }
+}
+
+// Заглушка отрисовки Spam (будет улучшена во втором коммите)
+void DrawSpam(void) {
+    if (!spamActive) return;
+
+    DrawText("SPAM ALT!", GetScreenWidth()/2 - MeasureText("SPAM ALT!", 30)/2, GetScreenHeight()/2 - 60, 30, WHITE);
+    char countStr[8];
+    sprintf(countStr, "%d", spamCountdown);
+    DrawText(countStr, GetScreenWidth()/2 - MeasureText(countStr, 40)/2, GetScreenHeight()/2, 40, RED);
+}
+
+// Заглушка отрисовки Jumpscare (она уже есть, но продублируем прототип)
 void DrawJumpscare(void) {
     if (!jumpscareActive) return;
 
@@ -596,13 +684,13 @@ void UpdateGameplay(void) {
         }
         UpdateQTE();
         UpdateJumpscare();
+        UpdateSpam();
 
         if (jumpscareActive && jumpscarePhase == 2 && IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
             jumpscareActive = false;
             jumpscareSpawnCooldown = true;
             jumpscareCooldownTimer = 10.0;
             activeDynamicEnemies--;
-            return;
         }
     }
 
@@ -712,7 +800,7 @@ void DrawGameplay(void) {
         }
     }
 
-    // енератор
+    // Генератор
     Rectangle genPanel = { 10, GetScreenHeight() - 70, 150, 60 };
     DrawRectangleRec(genPanel, Fade(BLACK, 0.7f));
     DrawRectangleLinesEx(genPanel, 2, WHITE);
@@ -784,8 +872,8 @@ void DrawGameplay(void) {
         DrawRectangle((int)qteWindowRect.x + 2, barY, (int)((qteWindowRect.width - 4) * timeFraction), 4, RED);
     }
 
-    // Jumpscare
-    DrawJumpscare();
+    DrawJumpscare();  // Теперь компилятор знает о ней из прототипа
+    DrawSpam();       // Аналогично
 
     if (gameLost) DrawText("YOU LOST! (ENTER to menu)", GetScreenWidth()/2 - MeasureText("YOU LOST! (ENTER to menu)", 30)/2, 45, 30, RED);
     else if (gameWon) DrawText("YOU WIN! (ENTER to menu)", GetScreenWidth()/2 - MeasureText("YOU WIN! (ENTER to menu)", 30)/2, 45, 30, GREEN);
