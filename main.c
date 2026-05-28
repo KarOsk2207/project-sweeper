@@ -58,20 +58,17 @@ int cellSize = 30;
 int gridX = 50;
 int gridY = 80;
 
-// енератор
 float generatorCharge = 50.0f;
 const float GENERATOR_CHARGE_RATE = 25.0f;
 const float GENERATOR_DISCHARGE_RATE = 3.0f;
 bool generatorWarning = false;
 
-// Фазовый враг
 int phaseEnemyPhase = 1;
 double phaseEnemyTimer = 0.0;
 const double PHASE_TRANSITION_TIME = 15.0;
 Rectangle phaseEnemyResetBtn;
 bool phaseEnemyResetQueued = false;
 
-// QTE враг
 bool qteActive = false;
 int qteSequence[5] = { 0 };
 int qteCurrentIndex = 0;
@@ -81,14 +78,12 @@ double qteSpawnTimer = 0.0;
 Rectangle qteWindowRect;
 bool qteSpawnCooldown = false;
 
-// Jumpscare враг
 bool jumpscareActive = false;
-int jumpscarePhase = 0;            // 0: prepare, 1: approach, 2: red
-double jumpscareTimer = 0.0;       // таймер фазы
+int jumpscarePhase = 0;
+double jumpscareTimer = 0.0;
 double jumpscareCooldownTimer = 0.0;
 double jumpscareSpawnTimer = 0.0;
 bool jumpscareSpawnCooldown = false;
-// араметры куба (будут использованы позже)
 Rectangle jumpscareCubeRect = { 0, 0, 0, 0 };
 
 Button newGameBtn;
@@ -434,7 +429,6 @@ void UpdateQTE(void) {
     }
 }
 
-// ======================= Jumpscare =======================
 void UpdateJumpscare(void) {
     if (cheatActive) {
         jumpscareActive = false;
@@ -461,30 +455,28 @@ void UpdateJumpscare(void) {
         if (jumpscareSpawnTimer >= 7.0) {
             jumpscareSpawnTimer = 0.0;
             if ((rand() % 100) < 20) {
-                // Спавн
                 jumpscareActive = true;
-                jumpscarePhase = 0;          // prepare
+                jumpscarePhase = 0;
                 jumpscareTimer = 0.0;
             }
         }
     } else {
         jumpscareTimer += dt;
         switch (jumpscarePhase) {
-            case 0: // Prepare
+            case 0:
                 if (jumpscareTimer >= 1.0) {
-                    jumpscarePhase = 1;      // approach
+                    jumpscarePhase = 1;
                     jumpscareTimer = 0.0;
                 }
                 break;
-            case 1: // Approach
+            case 1:
                 if (jumpscareTimer >= 2.0) {
-                    jumpscarePhase = 2;      // red
+                    jumpscarePhase = 2;
                     jumpscareTimer = 0.0;
                 }
                 break;
-            case 2: // Red
+            case 2:
                 if (jumpscareTimer >= 2.0) {
-                    // е успел отбить – проигрыш
                     if (!gameLost) gameLost = true;
                     jumpscareActive = false;
                 }
@@ -496,17 +488,36 @@ void UpdateJumpscare(void) {
 void DrawJumpscare(void) {
     if (!jumpscareActive) return;
 
+    int w = GetScreenWidth();
+    int h = GetScreenHeight();
+
     if (jumpscarePhase == 0) {
-        DrawText("PREPARE", GetScreenWidth()/2 - MeasureText("PREPARE", 40)/2, GetScreenHeight() - 50, 40, WHITE);
-    } else if (jumpscarePhase == 1) {
-        // аглушка: текст
-        DrawText("APPROACH...", GetScreenWidth()/2 - MeasureText("APPROACH...", 40)/2, GetScreenHeight()/2 - 20, 40, YELLOW);
-    } else if (jumpscarePhase == 2) {
-        DrawText("PRESS RIGHT MOUSE BUTTON!", GetScreenWidth()/2 - MeasureText("PRESS RIGHT MOUSE BUTTON!", 30)/2, GetScreenHeight()/2, 30, RED);
+        DrawText("PREPARE", w/2 - MeasureText("PREPARE", 40)/2, h - 50, 40, WHITE);
+    } else {
+        // азмер куба: от 0 до 70% экрана на фазе 1, и от 70% до 90% на фазе 2
+        float size = 0.0f;
+        if (jumpscarePhase == 1) {
+            // астет от 0 до 70%
+            float t = (float)(jumpscareTimer / 2.0); // 0..1
+            if (t > 1.0f) t = 1.0f;
+            size = t * (w * 0.7f);
+        } else { // phase 2
+            // астет от 70% до 90%
+            float t = (float)(jumpscareTimer / 2.0);
+            if (t > 1.0f) t = 1.0f;
+            size = w * 0.7f + t * (w * 0.2f);
+        }
+
+        // Центр экрана
+        float x = w/2 - size/2;
+        float y = h/2 - size/2;
+
+        // Цвет: желтый на фазе 1, красный на фазе 2
+        Color cubeColor = (jumpscarePhase == 1) ? YELLOW : RED;
+
+        DrawRectangle((int)x, (int)y, (int)size, (int)size, cubeColor);
     }
 }
-
-// --------------------------------------------------------
 
 void UpdateMenu(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
@@ -581,13 +592,11 @@ void UpdateGameplay(void) {
         UpdateQTE();
         UpdateJumpscare();
 
-        // роверка отбивания jumpscare (правый клик)
         if (jumpscareActive && jumpscarePhase == 2 && IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
-            // Успешно отбили
             jumpscareActive = false;
             jumpscareSpawnCooldown = true;
             jumpscareCooldownTimer = 10.0;
-            return; // е обрабатываем другие клики в этом кадре
+            return;
         }
     }
 
