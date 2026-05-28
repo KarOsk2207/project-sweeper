@@ -57,6 +57,12 @@ int cellSize = 30;
 int gridX = 50;
 int gridY = 80;
 
+// --- енератор ---
+float generatorCharge = 50.0f;   // 0..100
+const float GENERATOR_CHARGE_RATE = 25.0f;   // % в секунду при зажатии Shift
+const float GENERATOR_DISCHARGE_RATE = 3.0f; // % в секунду пассивной разрядки
+bool generatorMessage = false;   // для мигающего предупреждения (позже)
+
 Button newGameBtn;
 Button settingsBtn;
 Button statsBtn;
@@ -88,13 +94,8 @@ Color cellColorOptions[4] = {
     { 180, 255, 180, 255 }
 };
 
-// ========== Функции сохранения/загрузки ==========
 void SaveData(void) {
-    const char *dir = GetApplicationDirectory();
-    char filepath[256];
-    snprintf(filepath, sizeof(filepath), "%ssweeper.dat", dir);
-    
-    FILE *f = fopen(filepath, "w");
+    FILE *f = fopen("sweeper.dat", "w");
     if (f) {
         fprintf(f, "%d %d %d %d\n", bgColor.r, bgColor.g, bgColor.b, bgColor.a);
         fprintf(f, "%d %d %d %d\n", cellColor.r, cellColor.g, cellColor.b, cellColor.a);
@@ -105,11 +106,7 @@ void SaveData(void) {
 }
 
 void LoadData(void) {
-    const char *dir = GetApplicationDirectory();
-    char filepath[256];
-    snprintf(filepath, sizeof(filepath), "%ssweeper.dat", dir);
-    
-    FILE *f = fopen(filepath, "r");
+    FILE *f = fopen("sweeper.dat", "r");
     if (f) {
         fscanf(f, "%hhu %hhu %hhu %hhu", &bgColor.r, &bgColor.g, &bgColor.b, &bgColor.a);
         fscanf(f, "%hhu %hhu %hhu %hhu", &cellColor.r, &cellColor.g, &cellColor.b, &cellColor.a);
@@ -118,7 +115,6 @@ void LoadData(void) {
         fclose(f);
     }
 }
-// ===============================================
 
 void RecalculateGrid(void) {
     int w = GetScreenWidth();
@@ -148,6 +144,7 @@ void ResetGame(void) {
     startTime = 0.0;
     gameEndCounted = false;
     gamesPlayed++;
+    generatorCharge = 50.0f;      // сброс генератора
     RecalculateGrid();
 }
 
@@ -274,6 +271,33 @@ void UpdateCheatInput(void) {
     }
 }
 
+// бновление генератора
+void UpdateGenerator(void) {
+    if (cheatActive) {
+        generatorCharge = 100.0f;
+        return;
+    }
+
+    float dt = GetFrameTime();
+    if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) {
+        // аряжаем
+        generatorCharge += GENERATOR_CHARGE_RATE * dt;
+        if (generatorCharge >= 100.0f) {
+            generatorCharge = 100.0f;
+            // ерегрузка — проигрыш
+            if (!gameLost) gameLost = true;
+        }
+    } else {
+        // ассивная разрядка
+        generatorCharge -= GENERATOR_DISCHARGE_RATE * dt;
+        if (generatorCharge <= 0.0f) {
+            generatorCharge = 0.0f;
+            if (!gameLost) gameLost = true;   // разряд
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 void UpdateMenu(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         if (IsMouseOverButton(newGameBtn)) currentScreen = SCREEN_DIFFICULTY;
@@ -335,6 +359,12 @@ void UpdateGameplay(void) {
         RecalculateButtons();
     }
 
+    // бновляем генератор только в активной игре и не после завершения
+    if (!gameLost && !gameWon) {
+        UpdateGenerator();
+    }
+
+    // сли игра уже завершилась (в том числе из-за генератора), обрабатываем учёт и выход
     if (gameLost || gameWon) {
         if (!gameEndCounted) {
             if (gameLost) gamesLost++;
@@ -344,6 +374,7 @@ void UpdateGameplay(void) {
         if (IsKeyPressed(KEY_ENTER)) currentScreen = SCREEN_MENU;
         return;
     }
+
     if (IsKeyPressed(KEY_ESCAPE)) currentScreen = SCREEN_MENU;
 
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
@@ -441,6 +472,9 @@ void DrawGameplay(void) {
         }
     }
 
+    // аглушка для генератора (пока просто текст)
+    DrawText("GENERATOR", 10, GetScreenHeight() - 60, 20, WHITE);
+
     if (gameLost) DrawText("YOU LOST! (ENTER to menu)", GetScreenWidth()/2 - MeasureText("YOU LOST! (ENTER to menu)", 30)/2, 45, 30, RED);
     else if (gameWon) DrawText("YOU WIN! (ENTER to menu)", GetScreenWidth()/2 - MeasureText("YOU WIN! (ENTER to menu)", 30)/2, 45, 30, GREEN);
 }
@@ -511,8 +545,7 @@ int main(void)
     SetWindowMinSize(640, 480);
     InitMenuButtons();
     InitDifficultyButtons();
-
-    LoadData();   // загружаем настройки и статистику
+    LoadData();
 
     while (!WindowShouldClose())
     {
@@ -520,7 +553,6 @@ int main(void)
             RecalculateButtons();
             if (currentScreen == SCREEN_GAMEPLAY) RecalculateGrid();
         }
-
         UpdateCheatInput();
 
         switch (currentScreen) {
@@ -551,7 +583,7 @@ int main(void)
         EndDrawing();
     }
 
-    SaveData();   // сохраняем перед выходом
+    SaveData();
     CloseWindow();
     return 0;
 }
