@@ -94,6 +94,19 @@ double spamCooldownTimer = 0.0;
 double spamSpawnTimer = 0.0;
 bool spamSpawnCooldown = false;
 
+// Align враг
+bool alignActive = false;
+int alignCountdown = 8;
+double alignTimer = 0.0;
+bool alignCubesDone[3] = { false, false, false };
+Rectangle alignCubeRects[3];
+Rectangle alignZoneRects[3];
+Rectangle alignSubRects[3];
+int alignDragging = -1;
+double alignSpawnTimer = 0.0;
+double alignCooldownTimer = 0.0;
+bool alignSpawnCooldown = false;
+
 int activeDynamicEnemies = 0;
 #define MAX_DYNAMIC_ENEMIES 3
 
@@ -127,6 +140,11 @@ Color cellColorOptions[4] = {
     { 180, 200, 255, 255 },
     { 180, 255, 180, 255 }
 };
+
+// Прототипы функций отрисовки врагов
+void DrawJumpscare(void);
+void DrawSpam(void);
+void DrawAlign(void);
 
 void SaveData(void) {
     FILE *f = fopen("sweeper.dat", "w");
@@ -193,6 +211,10 @@ void ResetGame(void) {
     spamSpawnCooldown = false;
     spamCooldownTimer = 0.0;
     spamSpawnTimer = 0.0;
+    alignActive = false;
+    alignSpawnCooldown = false;
+    alignCooldownTimer = 0.0;
+    alignSpawnTimer = 0.0;
     activeDynamicEnemies = 0;
     RecalculateGrid();
 }
@@ -322,6 +344,7 @@ void UpdateCheatInput(void) {
                 if (qteActive) { qteActive = false; activeDynamicEnemies--; }
                 if (jumpscareActive) { jumpscareActive = false; activeDynamicEnemies--; }
                 if (spamActive) { spamActive = false; activeDynamicEnemies--; }
+                if (alignActive) { alignActive = false; activeDynamicEnemies--; }
             }
         }
     }
@@ -569,39 +592,101 @@ void UpdateSpam(void) {
     }
 }
 
+// Заглушка отрисовки Jumpscare (должна быть определена)
+void DrawJumpscare(void) {
+    if (!jumpscareActive) return;
+
+    int w = GetScreenWidth();
+    int h = GetScreenHeight();
+
+    if (jumpscarePhase == 0) {
+        DrawText("PREPARE", w/2 - MeasureText("PREPARE", 40)/2, h - 50, 40, WHITE);
+    } else {
+        float size = 0.0f;
+        if (jumpscarePhase == 1) {
+            float t = (float)(jumpscareTimer / 2.0);
+            if (t > 1.0f) t = 1.0f;
+            size = t * (w * 0.7f);
+        } else {
+            float t = (float)(jumpscareTimer / 2.0);
+            if (t > 1.0f) t = 1.0f;
+            size = w * 0.7f + t * (w * 0.2f);
+        }
+
+        float x = w/2 - size/2;
+        float y = h/2 - size/2;
+        Color cubeColor = (jumpscarePhase == 1) ? YELLOW : RED;
+        DrawRectangle((int)x, (int)y, (int)size, (int)size, cubeColor);
+    }
+}
+
+// Заглушка отрисовки Spam (будет улучшена во втором коммите для спама, но здесь нужна хотя бы пустая, чтобы не было ошибки)
 void DrawSpam(void) {
     if (!spamActive) return;
 
-    // кно в центре экрана
-    Rectangle spamRect = {
-        (float)(GetScreenWidth()/2 - 150),
-        (float)(GetScreenHeight()/2 - 60),
-        300, 120
-    };
-    DrawRectangleRec(spamRect, Fade(BLACK, 0.85f));
-    DrawRectangleLinesEx(spamRect, 2, RED);
-
-    // аголовок
-    DrawText("SPAM ALT!", (int)(spamRect.x + spamRect.width/2 - MeasureText("SPAM ALT!", 24)/2),
-             (int)(spamRect.y + 5), 24, WHITE);
-
-    // братный отсчет
+    DrawText("SPAM ALT!", GetScreenWidth()/2 - MeasureText("SPAM ALT!", 30)/2, GetScreenHeight()/2 - 60, 30, WHITE);
     char countStr[8];
     sprintf(countStr, "%d", spamCountdown);
-    int countSize = 40;
-    DrawText(countStr,
-             (int)(spamRect.x + spamRect.width/2 - MeasureText(countStr, countSize)/2),
-             (int)(spamRect.y + 35),
-             countSize, (spamCountdown <= 2) ? RED : YELLOW);
+    DrawText(countStr, GetScreenWidth()/2 - MeasureText(countStr, 40)/2, GetScreenHeight()/2, 40, RED);
+}
 
-    // Шкала прогресса
-    int barX = (int)spamRect.x + 15;
-    int barY = (int)spamRect.y + 85;
-    int barWidth = (int)spamRect.width - 30;
-    int barHeight = 10;
-    DrawRectangle(barX, barY, barWidth, barHeight, DARKGRAY);
-    DrawRectangle(barX, barY, (int)(barWidth * (spamProgress / 100.0f)), barHeight, GREEN);
-    DrawRectangleLines(barX, barY, barWidth, barHeight, WHITE);
+// Заглушка отрисовки Align (будет улучшена во втором коммите)
+void DrawAlign(void) {
+    if (!alignActive) return;
+
+    DrawText("ALIGN", GetScreenWidth()/2 - MeasureText("ALIGN", 30)/2, GetScreenHeight()/2 - 60, 30, WHITE);
+    char countStr[8];
+    sprintf(countStr, "%d", alignCountdown);
+    DrawText(countStr, GetScreenWidth()/2 - MeasureText(countStr, 40)/2, GetScreenHeight()/2, 40, RED);
+}
+
+void UpdateAlign(void) {
+    if (cheatActive) {
+        if (alignActive) { activeDynamicEnemies--; }
+        alignActive = false;
+        alignSpawnCooldown = false;
+        alignCooldownTimer = 0.0;
+        alignSpawnTimer = 0.0;
+        return;
+    }
+    if (gameLost || gameWon) return;
+
+    float dt = GetFrameTime();
+
+    if (alignSpawnCooldown) {
+        alignCooldownTimer -= dt;
+        if (alignCooldownTimer <= 0.0) {
+            alignSpawnCooldown = false;
+            alignSpawnTimer = 0.0;
+        }
+        return;
+    }
+
+    if (!alignActive) {
+        alignSpawnTimer += dt;
+        if (alignSpawnTimer >= 7.0) {
+            alignSpawnTimer = 0.0;
+            if (activeDynamicEnemies < MAX_DYNAMIC_ENEMIES && (rand() % 100) < 20) {
+                alignActive = true;
+                alignCountdown = 8;
+                alignTimer = 0.0;
+                for (int i = 0; i < 3; i++) alignCubesDone[i] = false;
+                alignDragging = -1;
+                activeDynamicEnemies++;
+            }
+        }
+    } else {
+        alignTimer += dt;
+        if (alignTimer >= 1.0) {
+            alignTimer -= 1.0;
+            alignCountdown--;
+            if (alignCountdown < 0) {
+                if (!gameLost) gameLost = true;
+                alignActive = false;
+                activeDynamicEnemies--;
+            }
+        }
+    }
 }
 
 void UpdateMenu(void) {
@@ -677,6 +762,7 @@ void UpdateGameplay(void) {
         UpdateQTE();
         UpdateJumpscare();
         UpdateSpam();
+        UpdateAlign();
 
         if (jumpscareActive && jumpscarePhase == 2 && IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
             jumpscareActive = false;
@@ -697,39 +783,41 @@ void UpdateGameplay(void) {
     }
     if (IsKeyPressed(KEY_ESCAPE)) currentScreen = SCREEN_MENU;
 
-    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-        Vector2 mouse = GetMousePosition();
-        if (CheckCollisionPointRec(mouse, smileyRect)) {
-            ResetGame();
-            return;
+    if (!alignActive) {
+        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+            Vector2 mouse = GetMousePosition();
+            if (CheckCollisionPointRec(mouse, smileyRect)) {
+                ResetGame();
+                return;
+            }
         }
-    }
 
-    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
-        Vector2 mouse = GetMousePosition();
-        int col = (int)((mouse.x - gridX) / cellSize);
-        int row = (int)((mouse.y - gridY) / cellSize);
+        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
+            Vector2 mouse = GetMousePosition();
+            int col = (int)((mouse.x - gridX) / cellSize);
+            int row = (int)((mouse.y - gridY) / cellSize);
 
-        if (row >= 0 && row < gameBoard.rows && col >= 0 && col < gameBoard.cols) {
-            if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-                if (!gameBoard.firstClickDone) {
-                    BoardPlaceMines(&gameBoard, row, col);
-                    BoardCalculateNumbers(&gameBoard);
-                    timerStarted = true;
-                    startTime = GetTime();
-                }
-                bool hitMine = BoardReveal(&gameBoard, row, col);
-                if (hitMine) gameLost = true;
-                else gameWon = BoardCheckVictory(&gameBoard);
-            } else if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
-                if (!gameBoard.firstClickDone) return;
-                Cell* cell = &gameBoard.cells[row][col];
-                if (cell->state == CELL_HIDDEN) {
-                    cell->state = CELL_FLAGGED;
-                    flagCount++;
-                } else if (cell->state == CELL_FLAGGED) {
-                    cell->state = CELL_HIDDEN;
-                    flagCount--;
+            if (row >= 0 && row < gameBoard.rows && col >= 0 && col < gameBoard.cols) {
+                if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                    if (!gameBoard.firstClickDone) {
+                        BoardPlaceMines(&gameBoard, row, col);
+                        BoardCalculateNumbers(&gameBoard);
+                        timerStarted = true;
+                        startTime = GetTime();
+                    }
+                    bool hitMine = BoardReveal(&gameBoard, row, col);
+                    if (hitMine) gameLost = true;
+                    else gameWon = BoardCheckVictory(&gameBoard);
+                } else if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
+                    if (!gameBoard.firstClickDone) return;
+                    Cell* cell = &gameBoard.cells[row][col];
+                    if (cell->state == CELL_HIDDEN) {
+                        cell->state = CELL_FLAGGED;
+                        flagCount++;
+                    } else if (cell->state == CELL_FLAGGED) {
+                        cell->state = CELL_HIDDEN;
+                        flagCount--;
+                    }
                 }
             }
         }
@@ -792,7 +880,7 @@ void DrawGameplay(void) {
         }
     }
 
-    // енератор
+    // Генератор
     Rectangle genPanel = { 10, GetScreenHeight() - 70, 150, 60 };
     DrawRectangleRec(genPanel, Fade(BLACK, 0.7f));
     DrawRectangleLinesEx(genPanel, 2, WHITE);
@@ -864,32 +952,10 @@ void DrawGameplay(void) {
         DrawRectangle((int)qteWindowRect.x + 2, barY, (int)((qteWindowRect.width - 4) * timeFraction), 4, RED);
     }
 
-    // Jumpscare
-    if (jumpscareActive) {
-        int w = GetScreenWidth();
-        int h = GetScreenHeight();
-        if (jumpscarePhase == 0) {
-            DrawText("PREPARE", w/2 - MeasureText("PREPARE", 40)/2, h - 50, 40, WHITE);
-        } else {
-            float size = 0.0f;
-            if (jumpscarePhase == 1) {
-                float t = (float)(jumpscareTimer / 2.0);
-                if (t > 1.0f) t = 1.0f;
-                size = t * (w * 0.7f);
-            } else {
-                float t = (float)(jumpscareTimer / 2.0);
-                if (t > 1.0f) t = 1.0f;
-                size = w * 0.7f + t * (w * 0.2f);
-            }
-            float x = w/2 - size/2;
-            float y = h/2 - size/2;
-            Color cubeColor = (jumpscarePhase == 1) ? YELLOW : RED;
-            DrawRectangle((int)x, (int)y, (int)size, (int)size, cubeColor);
-        }
-    }
-
-    // Spam
+    // Отрисовка всех врагов
+    DrawJumpscare();
     DrawSpam();
+    DrawAlign();
 
     if (gameLost) DrawText("YOU LOST! (ENTER to menu)", GetScreenWidth()/2 - MeasureText("YOU LOST! (ENTER to menu)", 30)/2, 45, 30, RED);
     else if (gameWon) DrawText("YOU WIN! (ENTER to menu)", GetScreenWidth()/2 - MeasureText("YOU WIN! (ENTER to menu)", 30)/2, 45, 30, GREEN);
