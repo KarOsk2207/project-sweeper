@@ -50,7 +50,8 @@ int gamesLost = 0;
 bool gameEndCounted = false;
 
 bool cheatActive = false;
-char inputBuffer[6] = "";
+bool devMode = false;
+char inputBuffer[12] = "";
 
 bool fullscreen = false;
 
@@ -140,10 +141,74 @@ Color cellColorOptions[4] = {
     { 180, 255, 180, 255 }
 };
 
-// Прототипы
 void DrawJumpscare(void);
 void DrawSpam(void);
 void DrawAlign(void);
+
+// ---------- Dev-спавн ----------
+void SpawnQTE(void) {
+    if (qteActive || activeDynamicEnemies >= MAX_DYNAMIC_ENEMIES) return;
+    qteActive = true;
+    qteCurrentIndex = 0;
+    qteTimeLeft = 9.0;
+    for (int i = 0; i < 5; i++) qteSequence[i] = rand() % 4;
+    qteWindowRect.x = rand() % (GetScreenWidth() - 200);
+    qteWindowRect.y = rand() % (GetScreenHeight() - 100);
+    qteWindowRect.width = 200;
+    qteWindowRect.height = 80;
+    qteSpawnCooldown = false; // сброс кулдаунов, чтобы после завершения враг мог появиться естественно
+    qteCooldownTimer = 0.0;
+    qteSpawnTimer = 0.0;
+    activeDynamicEnemies++;
+}
+
+void SpawnJumpscare(void) {
+    if (jumpscareActive || activeDynamicEnemies >= MAX_DYNAMIC_ENEMIES) return;
+    jumpscareActive = true;
+    jumpscarePhase = 0;
+    jumpscareTimer = 0.0;
+    jumpscareSpawnCooldown = false;
+    jumpscareCooldownTimer = 0.0;
+    jumpscareSpawnTimer = 0.0;
+    activeDynamicEnemies++;
+}
+
+void SpawnSpam(void) {
+    if (spamActive || activeDynamicEnemies >= MAX_DYNAMIC_ENEMIES) return;
+    spamActive = true;
+    spamCountdown = 5;
+    spamProgress = 0;
+    spamTickTimer = 0.0;
+    spamSpawnCooldown = false;
+    spamCooldownTimer = 0.0;
+    spamSpawnTimer = 0.0;
+    activeDynamicEnemies++;
+}
+
+void SpawnAlign(void) {
+    if (alignActive || activeDynamicEnemies >= MAX_DYNAMIC_ENEMIES) return;
+    alignActive = true;
+    alignCountdown = 8;
+    alignTimer = 0.0;
+    for (int i = 0; i < 3; i++) alignCubesDone[i] = false;
+    alignDragging = -1;
+    Rectangle mainRect = { GetScreenWidth()/2 - 150, GetScreenHeight()/2 - 110, 300, 220 };
+    float subH = 50, pad = 10, zoneW = 60, zoneH = 20, cubeSz = 20;
+    for (int i = 0; i < 3; i++) {
+        alignSubRects[i] = (Rectangle){ mainRect.x+pad, mainRect.y+60+i*(subH+5), mainRect.width-2*pad, subH };
+        float zY = alignSubRects[i].y + rand()%(int)(subH-zoneH);
+        alignZoneRects[i] = (Rectangle){ alignSubRects[i].x+alignSubRects[i].width-zoneW-5, zY, zoneW, zoneH };
+        float cY;
+        do { cY = alignSubRects[i].y + rand()%(int)(subH-cubeSz); }
+        while (cY+cubeSz > alignZoneRects[i].y-2 && cY < alignZoneRects[i].y+zoneH+2);
+        alignCubeRects[i] = (Rectangle){ alignSubRects[i].x+5, cY, cubeSz, cubeSz };
+    }
+    alignSpawnCooldown = false;
+    alignCooldownTimer = 0.0;
+    alignSpawnTimer = 0.0;
+    activeDynamicEnemies++;
+}
+// ---------------------------------
 
 void SaveData(void) {
     FILE *f = fopen("sweeper.dat", "w");
@@ -168,1013 +233,475 @@ void LoadData(void) {
 }
 
 void RecalculateGrid(void) {
-    int w = GetScreenWidth();
-    int h = GetScreenHeight();
-    int topMargin = 80;
-    int bottomMargin = 20;
-    int sideMargin = 20;
-    int availW = w - 2 * sideMargin;
-    int availH = h - topMargin - bottomMargin;
-    int maxCellW = availW / gameBoard.cols;
-    int maxCellH = availH / gameBoard.rows;
-    cellSize = (maxCellW < maxCellH) ? maxCellW : maxCellH;
+    int w = GetScreenWidth(), h = GetScreenHeight();
+    int top = 80, bot = 20, side = 20;
+    int availW = w - 2*side, availH = h - top - bot;
+    int maxCw = availW / gameBoard.cols, maxCh = availH / gameBoard.rows;
+    cellSize = (maxCw < maxCh) ? maxCw : maxCh;
     if (cellSize < 10) cellSize = 10;
     if (cellSize > 50) cellSize = 50;
-    gridX = (w - gameBoard.cols * cellSize) / 2;
-    gridY = topMargin + (availH - gameBoard.rows * cellSize) / 2;
-    if (gridY < topMargin) gridY = topMargin;
+    gridX = (w - gameBoard.cols*cellSize)/2;
+    gridY = top + (availH - gameBoard.rows*cellSize)/2;
+    if (gridY < top) gridY = top;
 }
 
 void ResetGame(void) {
     BoardInit(&gameBoard, gameConfig.rows, gameConfig.cols, gameConfig.mines);
-    gameLost = false;
-    gameWon = false;
-    flagCount = 0;
-    timer = 0;
-    timerStarted = false;
-    startTime = 0.0;
-    gameEndCounted = false;
-    gamesPlayed++;
+    gameLost = false; gameWon = false;
+    flagCount = 0; timer = 0; timerStarted = false; startTime = 0.0;
+    gameEndCounted = false; gamesPlayed++;
     generatorCharge = 50.0f;
-    phaseEnemyPhase = 1;
-    phaseEnemyTimer = 0.0;
-    qteActive = false;
-    qteSpawnCooldown = false;
-    qteCooldownTimer = 0.0;
-    qteSpawnTimer = 0.0;
-    jumpscareActive = false;
-    jumpscareSpawnCooldown = false;
-    jumpscareCooldownTimer = 0.0;
-    jumpscareSpawnTimer = 0.0;
-    spamActive = false;
-    spamSpawnCooldown = false;
-    spamCooldownTimer = 0.0;
-    spamSpawnTimer = 0.0;
-    alignActive = false;
-    alignSpawnCooldown = false;
-    alignCooldownTimer = 0.0;
-    alignSpawnTimer = 0.0;
+    phaseEnemyPhase = 1; phaseEnemyTimer = 0.0;
+    qteActive = false; qteSpawnCooldown = false; qteCooldownTimer = 0.0; qteSpawnTimer = 0.0;
+    jumpscareActive = false; jumpscareSpawnCooldown = false; jumpscareCooldownTimer = 0.0; jumpscareSpawnTimer = 0.0;
+    spamActive = false; spamSpawnCooldown = false; spamCooldownTimer = 0.0; spamSpawnTimer = 0.0;
+    alignActive = false; alignSpawnCooldown = false; alignCooldownTimer = 0.0; alignSpawnTimer = 0.0;
     activeDynamicEnemies = 0;
     RecalculateGrid();
 }
 
 void InitMenuButtons(void) {
-    float btnWidth = 200, btnHeight = 50;
-    float centerX = (800 - btnWidth) / 2.0f;
-    newGameBtn.bounds = (Rectangle){ centerX, 160, btnWidth, btnHeight };
-    newGameBtn.text = "New Game";
-    newGameBtn.color = DARKGREEN;
-    newGameBtn.hoverColor = GREEN;
-
-    settingsBtn.bounds = (Rectangle){ centerX, 230, btnWidth, btnHeight };
-    settingsBtn.text = "Settings";
-    settingsBtn.color = DARKBLUE;
-    settingsBtn.hoverColor = BLUE;
-
-    statsBtn.bounds = (Rectangle){ centerX, 300, btnWidth, btnHeight };
-    statsBtn.text = "Stats";
-    statsBtn.color = DARKPURPLE;
-    statsBtn.hoverColor = PURPLE;
-
-    exitBtn.bounds = (Rectangle){ centerX, 370, btnWidth, btnHeight };
-    exitBtn.text = "Exit";
-    exitBtn.color = DARKGRAY;
-    exitBtn.hoverColor = GRAY;
+    float bw = 200, bh = 50, cx = (800 - bw)/2;
+    newGameBtn.bounds = (Rectangle){ cx, 160, bw, bh }; newGameBtn.text = "New Game"; newGameBtn.color = DARKGREEN; newGameBtn.hoverColor = GREEN;
+    settingsBtn.bounds = (Rectangle){ cx, 230, bw, bh }; settingsBtn.text = "Settings"; settingsBtn.color = DARKBLUE; settingsBtn.hoverColor = BLUE;
+    statsBtn.bounds = (Rectangle){ cx, 300, bw, bh }; statsBtn.text = "Stats"; statsBtn.color = DARKPURPLE; statsBtn.hoverColor = PURPLE;
+    exitBtn.bounds = (Rectangle){ cx, 370, bw, bh }; exitBtn.text = "Exit"; exitBtn.color = DARKGRAY; exitBtn.hoverColor = GRAY;
 }
 
 void InitDifficultyButtons(void) {
-    float btnWidth = 220, btnHeight = 50;
-    float centerX = (800 - btnWidth) / 2.0f;
-
-    easyBtn.bounds = (Rectangle){ centerX, 200, btnWidth, btnHeight };
-    easyBtn.text = "Easy (9x9, 10 mines)";
-    easyBtn.color = DARKGREEN;
-    easyBtn.hoverColor = GREEN;
-
-    mediumBtn.bounds = (Rectangle){ centerX, 270, btnWidth, btnHeight };
-    mediumBtn.text = "Medium (16x16, 40 mines)";
-    mediumBtn.color = DARKBLUE;
-    mediumBtn.hoverColor = BLUE;
-
-    hardBtn.bounds = (Rectangle){ centerX, 340, btnWidth, btnHeight };
-    hardBtn.text = "Hard (30x16, 99 mines)";
-    hardBtn.color = DARKPURPLE;
-    hardBtn.hoverColor = PURPLE;
-
-    backBtn.bounds = (Rectangle){ centerX, 420, btnWidth, btnHeight };
-    backBtn.text = "Back";
-    backBtn.color = DARKGRAY;
-    backBtn.hoverColor = GRAY;
-
-    backFromSettingsBtn.bounds = (Rectangle){ centerX, 480, btnWidth, btnHeight };
-    backFromSettingsBtn.text = "Back";
-    backFromSettingsBtn.color = DARKGRAY;
-    backFromSettingsBtn.hoverColor = GRAY;
-
+    float bw = 220, bh = 50, cx = (800 - bw)/2;
+    easyBtn.bounds = (Rectangle){ cx, 200, bw, bh }; easyBtn.text = "Easy (9x9, 10 mines)"; easyBtn.color = DARKGREEN; easyBtn.hoverColor = GREEN;
+    mediumBtn.bounds = (Rectangle){ cx, 270, bw, bh }; mediumBtn.text = "Medium (16x16, 40 mines)"; mediumBtn.color = DARKBLUE; mediumBtn.hoverColor = BLUE;
+    hardBtn.bounds = (Rectangle){ cx, 340, bw, bh }; hardBtn.text = "Hard (30x16, 99 mines)"; hardBtn.color = DARKPURPLE; hardBtn.hoverColor = PURPLE;
+    backBtn.bounds = (Rectangle){ cx, 420, bw, bh }; backBtn.text = "Back"; backBtn.color = DARKGRAY; backBtn.hoverColor = GRAY;
+    backFromSettingsBtn.bounds = (Rectangle){ cx, 480, bw, bh }; backFromSettingsBtn.text = "Back"; backFromSettingsBtn.color = DARKGRAY; backFromSettingsBtn.hoverColor = GRAY;
     backFromStatsBtn = backFromSettingsBtn;
-
-    float smallBtnW = 100, smallBtnH = 40;
-    float startX = 200;
-    for (int i = 0; i < 4; i++) {
-        bgColorBtns[i].bounds = (Rectangle){ startX + i * 110, 200, smallBtnW, smallBtnH };
-        bgColorBtns[i].text = "";
-        bgColorBtns[i].color = bgColorOptions[i];
-        bgColorBtns[i].hoverColor = bgColorOptions[i];
+    float sw = 100, sh = 40, sx = 200;
+    for (int i=0;i<4;i++) {
+        bgColorBtns[i].bounds = (Rectangle){ sx + i*110, 200, sw, sh }; bgColorBtns[i].text = ""; bgColorBtns[i].color = bgColorOptions[i]; bgColorBtns[i].hoverColor = bgColorOptions[i];
+        cellColorBtns[i].bounds = (Rectangle){ sx + i*110, 300, sw, sh }; cellColorBtns[i].text = ""; cellColorBtns[i].color = cellColorOptions[i]; cellColorBtns[i].hoverColor = cellColorOptions[i];
     }
-
-    for (int i = 0; i < 4; i++) {
-        cellColorBtns[i].bounds = (Rectangle){ startX + i * 110, 300, smallBtnW, smallBtnH };
-        cellColorBtns[i].text = "";
-        cellColorBtns[i].color = cellColorOptions[i];
-        cellColorBtns[i].hoverColor = cellColorOptions[i];
-    }
-
-    phaseEnemyResetBtn = (Rectangle){ 10, GetScreenHeight() - 140, 60, 30 };
+    phaseEnemyResetBtn = (Rectangle){ 10, GetScreenHeight()-140, 60, 30 };
 }
 
 void RecalculateButtons(void) {
     int w = GetScreenWidth();
-    float centerX = (w - 200) / 2.0f;
-    newGameBtn.bounds.x = centerX;
-    settingsBtn.bounds.x = centerX;
-    statsBtn.bounds.x = centerX;
-    exitBtn.bounds.x = centerX;
-
-    centerX = (w - 220) / 2.0f;
-    easyBtn.bounds.x = centerX;
-    mediumBtn.bounds.x = centerX;
-    hardBtn.bounds.x = centerX;
-    backBtn.bounds.x = centerX;
-    backFromSettingsBtn.bounds.x = centerX;
-    backFromStatsBtn.bounds.x = centerX;
-
-    float startX = (w - 4 * 110) / 2.0f;
-    for (int i = 0; i < 4; i++) {
-        bgColorBtns[i].bounds.x = startX + i * 110;
-        cellColorBtns[i].bounds.x = startX + i * 110;
-    }
+    float cx = (w-200)/2; newGameBtn.bounds.x = cx; settingsBtn.bounds.x = cx; statsBtn.bounds.x = cx; exitBtn.bounds.x = cx;
+    cx = (w-220)/2; easyBtn.bounds.x = cx; mediumBtn.bounds.x = cx; hardBtn.bounds.x = cx; backBtn.bounds.x = cx;
+    backFromSettingsBtn.bounds.x = cx; backFromStatsBtn.bounds.x = cx;
+    float sx = (w-4*110)/2;
+    for (int i=0;i<4;i++) { bgColorBtns[i].bounds.x = sx + i*110; cellColorBtns[i].bounds.x = sx + i*110; }
 }
 
-bool IsMouseOverButton(Button btn) {
-    return CheckCollisionPointRec(GetMousePosition(), btn.bounds);
-}
+bool IsMouseOverButton(Button btn) { return CheckCollisionPointRec(GetMousePosition(), btn.bounds); }
 
 void DrawButton(Button btn) {
-    Color color = IsMouseOverButton(btn) ? btn.hoverColor : btn.color;
-    DrawRectangleRec(btn.bounds, color);
-    DrawRectangleLinesEx(btn.bounds, 2, WHITE);
-    int textWidth = MeasureText(btn.text, 20);
-    float textX = btn.bounds.x + (btn.bounds.width - textWidth) / 2.0f;
-    float textY = btn.bounds.y + (btn.bounds.height - 20) / 2.0f;
-    DrawText(btn.text, (int)textX, (int)textY, 20, WHITE);
+    Color c = IsMouseOverButton(btn) ? btn.hoverColor : btn.color;
+    DrawRectangleRec(btn.bounds, c); DrawRectangleLinesEx(btn.bounds, 2, WHITE);
+    int tw = MeasureText(btn.text, 20);
+    float tx = btn.bounds.x + (btn.bounds.width-tw)/2, ty = btn.bounds.y + (btn.bounds.height-20)/2;
+    DrawText(btn.text, (int)tx, (int)ty, 20, WHITE);
 }
 
 void UpdateCheatInput(void) {
     int key = GetKeyPressed();
     if (key >= 65 && key <= 90) {
         char c = (char)key;
-        memmove(inputBuffer, inputBuffer + 1, 4);
-        inputBuffer[4] = c;
-        inputBuffer[5] = '\0';
+        memmove(inputBuffer, inputBuffer+1, 10);
+        inputBuffer[10] = c; inputBuffer[11] = '\0';
         if (strcmp(inputBuffer, "IDDQD") == 0) {
-            cheatActive = !cheatActive;
-            inputBuffer[0] = '\0';
+            cheatActive = !cheatActive; inputBuffer[0] = '\0';
             if (cheatActive) {
-                if (qteActive) { qteActive = false; activeDynamicEnemies--; }
-                if (jumpscareActive) { jumpscareActive = false; activeDynamicEnemies--; }
-                if (spamActive) { spamActive = false; activeDynamicEnemies--; }
-                if (alignActive) { alignActive = false; activeDynamicEnemies--; }
+                if (qteActive) { qteActive=false; activeDynamicEnemies--; }
+                if (jumpscareActive) { jumpscareActive=false; activeDynamicEnemies--; }
+                if (spamActive) { spamActive=false; activeDynamicEnemies--; }
+                if (alignActive) { alignActive=false; activeDynamicEnemies--; }
             }
+        }
+        if (strcmp(inputBuffer, "DEVCOMMANDS") == 0 && currentScreen == SCREEN_MENU) {
+            devMode = !devMode; inputBuffer[0] = '\0';
         }
     }
 }
 
 void UpdateGenerator(void) {
-    if (cheatActive) {
-        generatorCharge = 100.0f;
-        generatorWarning = false;
-        return;
-    }
-
+    if (cheatActive) { generatorCharge = 100.0f; generatorWarning = false; return; }
     float dt = GetFrameTime();
     if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) {
         generatorCharge += GENERATOR_CHARGE_RATE * dt;
-        if (generatorCharge >= 100.0f) {
-            generatorCharge = 100.0f;
-            if (!gameLost) gameLost = true;
-        }
+        if (generatorCharge >= 100.0f) { generatorCharge = 100.0f; if (!gameLost) gameLost = true; }
     } else {
         generatorCharge -= GENERATOR_DISCHARGE_RATE * dt;
-        if (generatorCharge <= 0.0f) {
-            generatorCharge = 0.0f;
-            if (!gameLost) gameLost = true;
-        }
+        if (generatorCharge <= 0.0f) { generatorCharge = 0.0f; if (!gameLost) gameLost = true; }
     }
     generatorWarning = (generatorCharge >= 90.0f);
 }
 
 void UpdatePhaseEnemy(void) {
-    if (cheatActive) {
-        phaseEnemyPhase = 1;
-        phaseEnemyTimer = 0.0;
-        return;
-    }
+    if (cheatActive) { phaseEnemyPhase = 1; phaseEnemyTimer = 0.0; return; }
     if (gameLost || gameWon) return;
-
-    float dt = GetFrameTime();
-    phaseEnemyTimer += dt;
-
+    float dt = GetFrameTime(); phaseEnemyTimer += dt;
     if (phaseEnemyResetQueued) {
-        if (generatorCharge >= 20.0f) {
-            generatorCharge -= 20.0f;
-            phaseEnemyPhase = 1;
-            phaseEnemyTimer = 0.0;
-        }
+        if (generatorCharge >= 20.0f) { generatorCharge -= 20.0f; phaseEnemyPhase = 1; phaseEnemyTimer = 0.0; }
         phaseEnemyResetQueued = false;
     }
-
     if (phaseEnemyTimer >= PHASE_TRANSITION_TIME && phaseEnemyPhase < 5) {
-        phaseEnemyPhase++;
-        phaseEnemyTimer = 0.0;
-        if (phaseEnemyPhase >= 5) {
-            if (!gameLost) gameLost = true;
-        }
+        phaseEnemyPhase++; phaseEnemyTimer = 0.0;
+        if (phaseEnemyPhase >= 5) { if (!gameLost) gameLost = true; }
     }
 }
 
 void UpdateQTE(void) {
-    if (cheatActive) {
-        if (qteActive) { activeDynamicEnemies--; }
-        qteActive = false;
-        qteSpawnCooldown = false;
-        qteCooldownTimer = 0.0;
-        qteSpawnTimer = 0.0;
-        return;
-    }
+    if (cheatActive) { if (qteActive) { activeDynamicEnemies--; } qteActive=false; qteSpawnCooldown=false; qteCooldownTimer=0; qteSpawnTimer=0; return; }
     if (gameLost || gameWon) return;
-
     float dt = GetFrameTime();
-
-    if (qteSpawnCooldown) {
-        qteCooldownTimer -= dt;
-        if (qteCooldownTimer <= 0.0) {
-            qteSpawnCooldown = false;
-            qteSpawnTimer = 0.0;
-        }
-        return;
-    }
-
+    if (qteSpawnCooldown) { qteCooldownTimer-=dt; if (qteCooldownTimer<=0) { qteSpawnCooldown=false; qteSpawnTimer=0; } return; }
     if (!qteActive) {
         qteSpawnTimer += dt;
-        if (qteSpawnTimer >= 7.0) {
-            qteSpawnTimer = 0.0;
-            if (activeDynamicEnemies < MAX_DYNAMIC_ENEMIES && (rand() % 100) < 20) {
-                qteActive = true;
-                qteCurrentIndex = 0;
-                qteTimeLeft = 9.0;
-                for (int i = 0; i < 5; i++) {
-                    qteSequence[i] = rand() % 4;
-                }
-                qteWindowRect.x = (float)(rand() % (GetScreenWidth() - 200));
-                qteWindowRect.y = (float)(rand() % (GetScreenHeight() - 100));
-                qteWindowRect.width = 200;
-                qteWindowRect.height = 80;
-                activeDynamicEnemies++;
-            }
-        }
+        if (qteSpawnTimer >= 7.0) { qteSpawnTimer=0; if (activeDynamicEnemies<MAX_DYNAMIC_ENEMIES && (rand()%100)<20) {
+            qteActive=true; qteCurrentIndex=0; qteTimeLeft=9.0;
+            for(int i=0;i<5;i++) qteSequence[i]=rand()%4;
+            qteWindowRect.x=rand()%(GetScreenWidth()-200); qteWindowRect.y=rand()%(GetScreenHeight()-100);
+            qteWindowRect.width=200; qteWindowRect.height=80; activeDynamicEnemies++; } }
     } else {
-        int key = GetKeyPressed();
-        if (key == KEY_UP || key == KEY_DOWN || key == KEY_LEFT || key == KEY_RIGHT) {
-            int expected = qteSequence[qteCurrentIndex];
-            bool correct = false;
-            if (key == KEY_UP && expected == 0) correct = true;
-            else if (key == KEY_DOWN && expected == 1) correct = true;
-            else if (key == KEY_LEFT && expected == 2) correct = true;
-            else if (key == KEY_RIGHT && expected == 3) correct = true;
-
-            if (correct) {
+        int k = GetKeyPressed();
+        if (k==KEY_UP||k==KEY_DOWN||k==KEY_LEFT||k==KEY_RIGHT) {
+            int exp = qteSequence[qteCurrentIndex];
+            if ((k==KEY_UP&&exp==0)||(k==KEY_DOWN&&exp==1)||(k==KEY_LEFT&&exp==2)||(k==KEY_RIGHT&&exp==3)) {
                 qteCurrentIndex++;
-                if (qteCurrentIndex >= 5) {
-                    qteActive = false;
-                    qteSpawnCooldown = true;
-                    qteCooldownTimer = 10.0;
-                    activeDynamicEnemies--;
-                }
+                if (qteCurrentIndex>=5) { qteActive=false; qteSpawnCooldown=true; qteCooldownTimer=10.0; activeDynamicEnemies--; }
             }
         }
-
-        qteTimeLeft -= dt;
-        if (qteTimeLeft <= 0.0) {
-            if (!gameLost) gameLost = true;
-            qteActive = false;
-            activeDynamicEnemies--;
-        }
+        qteTimeLeft-=dt; if (qteTimeLeft<=0) { if(!gameLost)gameLost=true; qteActive=false; activeDynamicEnemies--; }
     }
 }
 
 void UpdateJumpscare(void) {
-    if (cheatActive) {
-        if (jumpscareActive) { activeDynamicEnemies--; }
-        jumpscareActive = false;
-        jumpscareSpawnCooldown = false;
-        jumpscareCooldownTimer = 0.0;
-        jumpscareSpawnTimer = 0.0;
-        return;
-    }
+    if (cheatActive) { if (jumpscareActive) { activeDynamicEnemies--; } jumpscareActive=false; jumpscareSpawnCooldown=false; jumpscareCooldownTimer=0; jumpscareSpawnTimer=0; return; }
     if (gameLost || gameWon) return;
-
     float dt = GetFrameTime();
-
-    if (jumpscareSpawnCooldown) {
-        jumpscareCooldownTimer -= dt;
-        if (jumpscareCooldownTimer <= 0.0) {
-            jumpscareSpawnCooldown = false;
-            jumpscareSpawnTimer = 0.0;
-        }
-        return;
-    }
-
+    if (jumpscareSpawnCooldown) { jumpscareCooldownTimer-=dt; if (jumpscareCooldownTimer<=0) { jumpscareSpawnCooldown=false; jumpscareSpawnTimer=0; } return; }
     if (!jumpscareActive) {
-        jumpscareSpawnTimer += dt;
-        if (jumpscareSpawnTimer >= 7.0) {
-            jumpscareSpawnTimer = 0.0;
-            if (activeDynamicEnemies < MAX_DYNAMIC_ENEMIES && (rand() % 100) < 20) {
-                jumpscareActive = true;
-                jumpscarePhase = 0;
-                jumpscareTimer = 0.0;
-                activeDynamicEnemies++;
-            }
-        }
+        jumpscareSpawnTimer+=dt;
+        if (jumpscareSpawnTimer>=7.0) { jumpscareSpawnTimer=0; if (activeDynamicEnemies<MAX_DYNAMIC_ENEMIES && (rand()%100)<20) {
+            jumpscareActive=true; jumpscarePhase=0; jumpscareTimer=0; activeDynamicEnemies++; } }
     } else {
-        jumpscareTimer += dt;
+        jumpscareTimer+=dt;
         switch (jumpscarePhase) {
-            case 0:
-                if (jumpscareTimer >= 1.0) {
-                    jumpscarePhase = 1;
-                    jumpscareTimer = 0.0;
-                }
-                break;
-            case 1:
-                if (jumpscareTimer >= 2.0) {
-                    jumpscarePhase = 2;
-                    jumpscareTimer = 0.0;
-                }
-                break;
-            case 2:
-                if (jumpscareTimer >= 2.0) {
-                    if (!gameLost) gameLost = true;
-                    jumpscareActive = false;
-                    activeDynamicEnemies--;
-                }
-                break;
+            case 0: if (jumpscareTimer>=1.0) { jumpscarePhase=1; jumpscareTimer=0; } break;
+            case 1: if (jumpscareTimer>=2.0) { jumpscarePhase=2; jumpscareTimer=0; } break;
+            case 2: if (jumpscareTimer>=2.0) { if(!gameLost)gameLost=true; jumpscareActive=false; activeDynamicEnemies--; } break;
         }
     }
 }
 
 void UpdateSpam(void) {
-    if (cheatActive) {
-        if (spamActive) { activeDynamicEnemies--; }
-        spamActive = false;
-        spamSpawnCooldown = false;
-        spamCooldownTimer = 0.0;
-        spamSpawnTimer = 0.0;
-        return;
-    }
+    if (cheatActive) { if (spamActive) { activeDynamicEnemies--; } spamActive=false; spamSpawnCooldown=false; spamCooldownTimer=0; spamSpawnTimer=0; return; }
     if (gameLost || gameWon) return;
-
     float dt = GetFrameTime();
-
-    if (spamSpawnCooldown) {
-        spamCooldownTimer -= dt;
-        if (spamCooldownTimer <= 0.0) {
-            spamSpawnCooldown = false;
-            spamSpawnTimer = 0.0;
-        }
-        return;
-    }
-
+    if (spamSpawnCooldown) { spamCooldownTimer-=dt; if (spamCooldownTimer<=0) { spamSpawnCooldown=false; spamSpawnTimer=0; } return; }
     if (!spamActive) {
-        spamSpawnTimer += dt;
-        if (spamSpawnTimer >= 7.0) {
-            spamSpawnTimer = 0.0;
-            if (activeDynamicEnemies < MAX_DYNAMIC_ENEMIES && (rand() % 100) < 20) {
-                spamActive = true;
-                spamCountdown = 5;
-                spamProgress = 0;
-                spamTickTimer = 0.0;
-                activeDynamicEnemies++;
-            }
-        }
+        spamSpawnTimer+=dt;
+        if (spamSpawnTimer>=7.0) { spamSpawnTimer=0; if (activeDynamicEnemies<MAX_DYNAMIC_ENEMIES && (rand()%100)<20) {
+            spamActive=true; spamCountdown=5; spamProgress=0; spamTickTimer=0; activeDynamicEnemies++; } }
     } else {
-        if (IsKeyPressed(KEY_LEFT_ALT) || IsKeyPressed(KEY_RIGHT_ALT)) {
-            spamProgress += 7;
-            if (spamProgress > 100) spamProgress = 100;
-            if (spamProgress >= 100) {
-                spamActive = false;
-                spamSpawnCooldown = true;
-                spamCooldownTimer = 10.0;
-                activeDynamicEnemies--;
-                return;
-            }
+        if (IsKeyPressed(KEY_LEFT_ALT)||IsKeyPressed(KEY_RIGHT_ALT)) {
+            spamProgress+=7; if (spamProgress>100) spamProgress=100;
+            if (spamProgress>=100) { spamActive=false; spamSpawnCooldown=true; spamCooldownTimer=10.0; activeDynamicEnemies--; return; }
         }
-
-        spamTickTimer += dt;
-        if (spamTickTimer >= 1.0) {
-            spamTickTimer -= 1.0;
-            spamCountdown--;
-            if (spamCountdown < 0) {
-                if (!gameLost) gameLost = true;
-                spamActive = false;
-                activeDynamicEnemies--;
-            }
-        }
+        spamTickTimer+=dt;
+        if (spamTickTimer>=1.0) { spamTickTimer-=1.0; spamCountdown--; if (spamCountdown<0) { if(!gameLost)gameLost=true; spamActive=false; activeDynamicEnemies--; } }
     }
 }
 
 void UpdateAlign(void) {
-    if (cheatActive) {
-        if (alignActive) { activeDynamicEnemies--; }
-        alignActive = false;
-        alignSpawnCooldown = false;
-        alignCooldownTimer = 0.0;
-        alignSpawnTimer = 0.0;
-        return;
-    }
+    if (cheatActive) { if (alignActive) { activeDynamicEnemies--; } alignActive=false; alignSpawnCooldown=false; alignCooldownTimer=0; alignSpawnTimer=0; return; }
     if (gameLost || gameWon) return;
-
     float dt = GetFrameTime();
-
-    if (alignSpawnCooldown) {
-        alignCooldownTimer -= dt;
-        if (alignCooldownTimer <= 0.0) {
-            alignSpawnCooldown = false;
-            alignSpawnTimer = 0.0;
-        }
-        return;
-    }
-
+    if (alignSpawnCooldown) { alignCooldownTimer-=dt; if (alignCooldownTimer<=0) { alignSpawnCooldown=false; alignSpawnTimer=0; } return; }
     if (!alignActive) {
-        alignSpawnTimer += dt;
-        if (alignSpawnTimer >= 7.0) {
-            alignSpawnTimer = 0.0;
-            if (activeDynamicEnemies < MAX_DYNAMIC_ENEMIES && (rand() % 100) < 20) {
-                alignActive = true;
-                alignCountdown = 8;
-                alignTimer = 0.0;
-                for (int i = 0; i < 3; i++) alignCubesDone[i] = false;
-                alignDragging = -1;
-
-                Rectangle mainRect = {
-                    GetScreenWidth()/2 - 150,
-                    GetScreenHeight()/2 - 110,
-                    300, 220
-                };
-                float subH = 50;
-                float padding = 10;
-                float zoneW = 60;
-                float zoneH = 20;
-                float cubeSize = 20;
-
-                for (int i = 0; i < 3; i++) {
-                    alignSubRects[i] = (Rectangle){
-                        mainRect.x + padding,
-                        mainRect.y + 60 + i * (subH + 5),
-                        mainRect.width - 2 * padding,
-                        subH
-                    };
-                    float zoneY = alignSubRects[i].y + rand() % (int)(subH - zoneH);
-                    alignZoneRects[i] = (Rectangle){
-                        alignSubRects[i].x + alignSubRects[i].width - zoneW - 5,
-                        zoneY,
-                        zoneW, zoneH
-                    };
-                    float cubeY;
-                    do {
-                        cubeY = alignSubRects[i].y + rand() % (int)(subH - cubeSize);
-                    } while (cubeY + cubeSize > alignZoneRects[i].y - 2 &&
-                             cubeY < alignZoneRects[i].y + zoneH + 2);
-                    alignCubeRects[i] = (Rectangle){
-                        alignSubRects[i].x + 5,
-                        cubeY,
-                        cubeSize, cubeSize
-                    };
-                }
-                activeDynamicEnemies++;
+        alignSpawnTimer+=dt;
+        if (alignSpawnTimer>=7.0) { alignSpawnTimer=0; if (activeDynamicEnemies<MAX_DYNAMIC_ENEMIES && (rand()%100)<20) {
+            alignActive=true; alignCountdown=8; alignTimer=0; for(int i=0;i<3;i++) alignCubesDone[i]=false; alignDragging=-1;
+            Rectangle mr = { GetScreenWidth()/2-150, GetScreenHeight()/2-110, 300, 220 };
+            float sh=50, pad=10, zw=60, zh=20, cs=20;
+            for(int i=0;i<3;i++) {
+                alignSubRects[i] = (Rectangle){ mr.x+pad, mr.y+60+i*(sh+5), mr.width-2*pad, sh };
+                float zy = alignSubRects[i].y + rand()%(int)(sh-zh);
+                alignZoneRects[i] = (Rectangle){ alignSubRects[i].x+alignSubRects[i].width-zw-5, zy, zw, zh };
+                float cy;
+                do { cy = alignSubRects[i].y + rand()%(int)(sh-cs); }
+                while (cy+cs > alignZoneRects[i].y-2 && cy < alignZoneRects[i].y+zh+2);
+                alignCubeRects[i] = (Rectangle){ alignSubRects[i].x+5, cy, cs, cs };
             }
-        }
+            activeDynamicEnemies++; } }
     } else {
-        alignTimer += dt;
-        if (alignTimer >= 1.0) {
-            alignTimer -= 1.0;
-            alignCountdown--;
-            if (alignCountdown < 0) {
-                if (!gameLost) gameLost = true;
-                alignActive = false;
-                activeDynamicEnemies--;
-                return;
-            }
-        }
-
-        Vector2 mouse = GetMousePosition();
+        alignTimer+=dt;
+        if (alignTimer>=1.0) { alignTimer-=1.0; alignCountdown--; if (alignCountdown<0) { if(!gameLost)gameLost=true; alignActive=false; activeDynamicEnemies--; return; } }
+        Vector2 m = GetMousePosition();
         if (IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
-            if (alignDragging == -1) {
-                for (int i = 0; i < 3; i++) {
-                    if (!alignCubesDone[i] && CheckCollisionPointRec(mouse, alignCubeRects[i])) {
-                        alignDragging = i;
-                        break;
-                    }
-                }
+            if (alignDragging==-1) { for(int i=0;i<3;i++) if(!alignCubesDone[i]&&CheckCollisionPointRec(m,alignCubeRects[i])) { alignDragging=i; break; } }
+            if (alignDragging!=-1) {
+                Rectangle* cu = &alignCubeRects[alignDragging];
+                cu->y = m.y - cu->height/2;
+                if (cu->y < alignSubRects[alignDragging].y) cu->y = alignSubRects[alignDragging].y;
+                if (cu->y+cu->height > alignSubRects[alignDragging].y+alignSubRects[alignDragging].height) cu->y = alignSubRects[alignDragging].y+alignSubRects[alignDragging].height - cu->height;
+                if (CheckCollisionRecs(*cu, alignZoneRects[alignDragging])) { alignCubesDone[alignDragging]=true; alignDragging=-1; }
             }
-            if (alignDragging != -1) {
-                Rectangle* cube = &alignCubeRects[alignDragging];
-                cube->y = mouse.y - cube->height/2;
-                if (cube->y < alignSubRects[alignDragging].y)
-                    cube->y = alignSubRects[alignDragging].y;
-                if (cube->y + cube->height > alignSubRects[alignDragging].y + alignSubRects[alignDragging].height)
-                    cube->y = alignSubRects[alignDragging].y + alignSubRects[alignDragging].height - cube->height;
-
-                if (CheckCollisionRecs(*cube, alignZoneRects[alignDragging])) {
-                    alignCubesDone[alignDragging] = true;
-                    alignDragging = -1;
-                }
-            }
-        } else {
-            alignDragging = -1;
-        }
-
-        if (alignCubesDone[0] && alignCubesDone[1] && alignCubesDone[2]) {
-            alignActive = false;
-            alignSpawnCooldown = true;
-            alignCooldownTimer = 10.0;
-            activeDynamicEnemies--;
-        }
+        } else alignDragging=-1;
+        if (alignCubesDone[0]&&alignCubesDone[1]&&alignCubesDone[2]) { alignActive=false; alignSpawnCooldown=true; alignCooldownTimer=10.0; activeDynamicEnemies--; }
     }
 }
 
-// --------------------- Отрисовка врагов ---------------------
 void DrawJumpscare(void) {
     if (!jumpscareActive) return;
-
-    int w = GetScreenWidth();
-    int h = GetScreenHeight();
-
-    if (jumpscarePhase == 0) {
-        DrawText("PREPARE", w/2 - MeasureText("PREPARE", 40)/2, h - 50, 40, WHITE);
-    } else {
-        float size = 0.0f;
-        if (jumpscarePhase == 1) {
-            float t = (float)(jumpscareTimer / 2.0);
-            if (t > 1.0f) t = 1.0f;
-            size = t * (w * 0.7f);
-        } else {
-            float t = (float)(jumpscareTimer / 2.0);
-            if (t > 1.0f) t = 1.0f;
-            size = w * 0.7f + t * (w * 0.2f);
-        }
-
-        float x = w/2 - size/2;
-        float y = h/2 - size/2;
-        Color cubeColor = (jumpscarePhase == 1) ? YELLOW : RED;
-        DrawRectangle((int)x, (int)y, (int)size, (int)size, cubeColor);
+    int w=GetScreenWidth(), h=GetScreenHeight();
+    if (jumpscarePhase==0) DrawText("PREPARE", w/2-MeasureText("PREPARE",40)/2, h-50, 40, WHITE);
+    else {
+        float sz = (jumpscarePhase==1) ? (jumpscareTimer/2.0)*w*0.7f : w*0.7f+(jumpscareTimer/2.0)*w*0.2f;
+        float x=w/2-sz/2, y=h/2-sz/2;
+        DrawRectangle((int)x,(int)y,(int)sz,(int)sz, jumpscarePhase==1?YELLOW:RED);
     }
 }
 
 void DrawSpam(void) {
     if (!spamActive) return;
-
-    Rectangle spamRect = {
-        (float)(GetScreenWidth()/2 - 150),
-        (float)(GetScreenHeight()/2 - 60),
-        300, 120
-    };
-    DrawRectangleRec(spamRect, Fade(BLACK, 0.85f));
-    DrawRectangleLinesEx(spamRect, 2, RED);
-
-    DrawText("SPAM ALT!", (int)(spamRect.x + spamRect.width/2 - MeasureText("SPAM ALT!", 24)/2),
-             (int)(spamRect.y + 5), 24, WHITE);
-
-    char countStr[8];
-    sprintf(countStr, "%d", spamCountdown);
-    int countSize = 40;
-    DrawText(countStr,
-             (int)(spamRect.x + spamRect.width/2 - MeasureText(countStr, countSize)/2),
-             (int)(spamRect.y + 35),
-             countSize, (spamCountdown <= 2) ? RED : YELLOW);
-
-    int barX = (int)spamRect.x + 15;
-    int barY = (int)spamRect.y + 85;
-    int barWidth = (int)spamRect.width - 30;
-    int barHeight = 10;
-    DrawRectangle(barX, barY, barWidth, barHeight, DARKGRAY);
-    DrawRectangle(barX, barY, (int)(barWidth * (spamProgress / 100.0f)), barHeight, GREEN);
-    DrawRectangleLines(barX, barY, barWidth, barHeight, WHITE);
+    Rectangle r = { GetScreenWidth()/2-150, GetScreenHeight()/2-60, 300, 120 };
+    DrawRectangleRec(r, Fade(BLACK,0.85f)); DrawRectangleLinesEx(r,2,RED);
+    DrawText("SPAM ALT!", r.x+r.width/2-MeasureText("SPAM ALT!",24)/2, r.y+5, 24, WHITE);
+    char buf[8]; sprintf(buf,"%d",spamCountdown);
+    DrawText(buf, r.x+r.width/2-MeasureText(buf,40)/2, r.y+35, 40, spamCountdown<=2?RED:YELLOW);
+    int bx=r.x+15, by=r.y+85, bw=r.width-30, bh=10;
+    DrawRectangle(bx,by,bw,bh,DARKGRAY);
+    DrawRectangle(bx,by,bw*(spamProgress/100.0f),bh,GREEN);
+    DrawRectangleLines(bx,by,bw,bh,WHITE);
 }
 
 void DrawAlign(void) {
     if (!alignActive) return;
-
-    Rectangle mainRect = {
-        GetScreenWidth()/2 - 150,
-        GetScreenHeight()/2 - 110,
-        300, 220
-    };
-    DrawRectangleRec(mainRect, Fade(BLACK, 0.85f));
-    DrawRectangleLinesEx(mainRect, 2, RED);
-
-    DrawText("ALIGN", mainRect.x + mainRect.width/2 - MeasureText("ALIGN", 24)/2, mainRect.y + 5, 24, WHITE);
-    char countStr[8];
-    sprintf(countStr, "%d", alignCountdown);
-    DrawText(countStr, mainRect.x + mainRect.width/2 - MeasureText(countStr, 40)/2, mainRect.y + 30, 40, RED);
-
-    for (int i = 0; i < 3; i++) {
-        DrawRectangleRec(alignSubRects[i], Fade(DARKGRAY, 0.5f));
-        DrawRectangleLinesEx(alignSubRects[i], 1, LIGHTGRAY);
-
+    Rectangle r = { GetScreenWidth()/2-150, GetScreenHeight()/2-110, 300, 220 };
+    DrawRectangleRec(r, Fade(BLACK,0.85f)); DrawRectangleLinesEx(r,2,RED);
+    DrawText("ALIGN", r.x+r.width/2-MeasureText("ALIGN",24)/2, r.y+5, 24, WHITE);
+    char buf[8]; sprintf(buf,"%d",alignCountdown);
+    DrawText(buf, r.x+r.width/2-MeasureText(buf,40)/2, r.y+30, 40, RED);
+    for (int i=0;i<3;i++) {
+        DrawRectangleRec(alignSubRects[i], Fade(DARKGRAY,0.5f)); DrawRectangleLinesEx(alignSubRects[i],1,LIGHTGRAY);
         DrawRectangleRec(alignZoneRects[i], GREEN);
-        Color cubeColor = alignCubesDone[i] ? GRAY : RED;
-        DrawRectangleRec(alignCubeRects[i], cubeColor);
+        DrawRectangleRec(alignCubeRects[i], alignCubesDone[i]?GRAY:RED);
     }
 }
 
-// --------------------- Остальные экраны ---------------------
 void UpdateMenu(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-        if (IsMouseOverButton(newGameBtn)) currentScreen = SCREEN_DIFFICULTY;
-        if (IsMouseOverButton(settingsBtn)) currentScreen = SCREEN_SETTINGS;
-        if (IsMouseOverButton(statsBtn)) currentScreen = SCREEN_STATS;
+        if (IsMouseOverButton(newGameBtn)) currentScreen=SCREEN_DIFFICULTY;
+        if (IsMouseOverButton(settingsBtn)) currentScreen=SCREEN_SETTINGS;
+        if (IsMouseOverButton(statsBtn)) currentScreen=SCREEN_STATS;
         if (IsMouseOverButton(exitBtn)) CloseWindow();
     }
 }
 
 void DrawMenu(void) {
-    DrawText("SWEEPER", GetScreenWidth()/2 - MeasureText("SWEEPER", 50)/2, 60, 50, WHITE);
-    DrawButton(newGameBtn);
-    DrawButton(settingsBtn);
-    DrawButton(statsBtn);
-    DrawButton(exitBtn);
+    DrawText("SWEEPER", GetScreenWidth()/2-MeasureText("SWEEPER",50)/2,60,50,WHITE);
+    DrawButton(newGameBtn); DrawButton(settingsBtn); DrawButton(statsBtn); DrawButton(exitBtn);
+    if (devMode) DrawText("DEV MODE ON", 10, GetScreenHeight()-30, 20, GREEN);
 }
 
 void UpdateDifficulty(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-        if (IsMouseOverButton(easyBtn)) {
-            gameConfig.rows = 9; gameConfig.cols = 9; gameConfig.mines = 10;
-            ResetGame();
-            currentScreen = SCREEN_GAMEPLAY;
-        }
-        if (IsMouseOverButton(mediumBtn)) {
-            gameConfig.rows = 16; gameConfig.cols = 16; gameConfig.mines = 40;
-            ResetGame();
-            currentScreen = SCREEN_GAMEPLAY;
-        }
-        if (IsMouseOverButton(hardBtn)) {
-            gameConfig.rows = 16; gameConfig.cols = 30; gameConfig.mines = 99;
-            ResetGame();
-            currentScreen = SCREEN_GAMEPLAY;
-        }
-        if (IsMouseOverButton(backBtn)) currentScreen = SCREEN_MENU;
+        if (IsMouseOverButton(easyBtn)) { gameConfig.rows=9;gameConfig.cols=9;gameConfig.mines=10; ResetGame(); currentScreen=SCREEN_GAMEPLAY; }
+        if (IsMouseOverButton(mediumBtn)) { gameConfig.rows=16;gameConfig.cols=16;gameConfig.mines=40; ResetGame(); currentScreen=SCREEN_GAMEPLAY; }
+        if (IsMouseOverButton(hardBtn)) { gameConfig.rows=16;gameConfig.cols=30;gameConfig.mines=99; ResetGame(); currentScreen=SCREEN_GAMEPLAY; }
+        if (IsMouseOverButton(backBtn)) currentScreen=SCREEN_MENU;
     }
 }
 
 void DrawDifficulty(void) {
-    DrawText("SELECT DIFFICULTY", GetScreenWidth()/2 - MeasureText("SELECT DIFFICULTY", 40)/2, 100, 40, WHITE);
-    DrawButton(easyBtn);
-    DrawButton(mediumBtn);
-    DrawButton(hardBtn);
-    DrawButton(backBtn);
+    DrawText("SELECT DIFFICULTY", GetScreenWidth()/2-MeasureText("SELECT DIFFICULTY",40)/2,100,40,WHITE);
+    DrawButton(easyBtn); DrawButton(mediumBtn); DrawButton(hardBtn); DrawButton(backBtn);
 }
 
 void UpdateGameplay(void) {
     if (IsKeyPressed(KEY_F11)) {
         fullscreen = !fullscreen;
-        if (fullscreen) {
-            int monitor = GetCurrentMonitor();
-            SetWindowSize(GetMonitorWidth(monitor), GetMonitorHeight(monitor));
-            ToggleFullscreen();
-        } else {
-            ToggleFullscreen();
-            SetWindowSize(800, 600);
-        }
-        RecalculateGrid();
-        RecalculateButtons();
+        if (fullscreen) { int mon = GetCurrentMonitor(); SetWindowSize(GetMonitorWidth(mon), GetMonitorHeight(mon)); ToggleFullscreen(); }
+        else { ToggleFullscreen(); SetWindowSize(800,600); }
+        RecalculateGrid(); RecalculateButtons();
     }
-
     if (!gameLost && !gameWon) {
-        UpdateGenerator();
-        UpdatePhaseEnemy();
+        UpdateGenerator(); UpdatePhaseEnemy();
         if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-            Vector2 mouse = GetMousePosition();
-            if (CheckCollisionPointRec(mouse, phaseEnemyResetBtn)) {
-                phaseEnemyResetQueued = true;
-            }
+            Vector2 m = GetMousePosition();
+            if (CheckCollisionPointRec(m, phaseEnemyResetBtn)) phaseEnemyResetQueued = true;
         }
-        UpdateQTE();
-        UpdateJumpscare();
-        UpdateSpam();
-        UpdateAlign();
-
-        if (jumpscareActive && jumpscarePhase == 2 && IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
-            jumpscareActive = false;
-            jumpscareSpawnCooldown = true;
-            jumpscareCooldownTimer = 10.0;
-            activeDynamicEnemies--;
+        UpdateQTE(); UpdateJumpscare(); UpdateSpam(); UpdateAlign();
+        if (jumpscareActive && jumpscarePhase==2 && IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
+            jumpscareActive=false; jumpscareSpawnCooldown=true; jumpscareCooldownTimer=10.0; activeDynamicEnemies--;
+        }
+        // Dev-спавн
+        if (devMode) {
+            if (IsKeyPressed(KEY_F1)) SpawnQTE();
+            else if (IsKeyPressed(KEY_F2)) SpawnJumpscare();
+            else if (IsKeyPressed(KEY_F3)) SpawnSpam();
+            else if (IsKeyPressed(KEY_F4)) SpawnAlign();
         }
     }
-
     if (gameLost || gameWon) {
-        if (!gameEndCounted) {
-            if (gameLost) gamesLost++;
-            else gamesWon++;
-            gameEndCounted = true;
-        }
-        if (IsKeyPressed(KEY_ENTER)) currentScreen = SCREEN_MENU;
+        if (!gameEndCounted) { if (gameLost) gamesLost++; else gamesWon++; gameEndCounted=true; }
+        if (IsKeyPressed(KEY_ENTER)) currentScreen=SCREEN_MENU;
         return;
     }
-    if (IsKeyPressed(KEY_ESCAPE)) currentScreen = SCREEN_MENU;
-
+    if (IsKeyPressed(KEY_ESCAPE)) currentScreen=SCREEN_MENU;
     if (!alignActive) {
         if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-            Vector2 mouse = GetMousePosition();
-            if (CheckCollisionPointRec(mouse, smileyRect)) {
-                ResetGame();
-                return;
-            }
+            Vector2 m = GetMousePosition();
+            if (CheckCollisionPointRec(m, smileyRect)) { ResetGame(); return; }
         }
-
         if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
-            Vector2 mouse = GetMousePosition();
-            int col = (int)((mouse.x - gridX) / cellSize);
-            int row = (int)((mouse.y - gridY) / cellSize);
-
-            if (row >= 0 && row < gameBoard.rows && col >= 0 && col < gameBoard.cols) {
+            Vector2 m = GetMousePosition();
+            int col = (int)((m.x-gridX)/cellSize), row = (int)((m.y-gridY)/cellSize);
+            if (row>=0 && row<gameBoard.rows && col>=0 && col<gameBoard.cols) {
                 if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-                    if (!gameBoard.firstClickDone) {
-                        BoardPlaceMines(&gameBoard, row, col);
-                        BoardCalculateNumbers(&gameBoard);
-                        timerStarted = true;
-                        startTime = GetTime();
-                    }
-                    bool hitMine = BoardReveal(&gameBoard, row, col);
-                    if (hitMine) gameLost = true;
-                    else gameWon = BoardCheckVictory(&gameBoard);
+                    if (!gameBoard.firstClickDone) { BoardPlaceMines(&gameBoard,row,col); BoardCalculateNumbers(&gameBoard); timerStarted=true; startTime=GetTime(); }
+                    bool hit = BoardReveal(&gameBoard,row,col);
+                    if (hit) gameLost=true; else gameWon=BoardCheckVictory(&gameBoard);
                 } else if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
                     if (!gameBoard.firstClickDone) return;
-                    Cell* cell = &gameBoard.cells[row][col];
-                    if (cell->state == CELL_HIDDEN) {
-                        cell->state = CELL_FLAGGED;
-                        flagCount++;
-                    } else if (cell->state == CELL_FLAGGED) {
-                        cell->state = CELL_HIDDEN;
-                        flagCount--;
-                    }
+                    Cell* c = &gameBoard.cells[row][col];
+                    if (c->state==CELL_HIDDEN) { c->state=CELL_FLAGGED; flagCount++; }
+                    else if (c->state==CELL_FLAGGED) { c->state=CELL_HIDDEN; flagCount--; }
                 }
             }
         }
     }
-
-    if (timerStarted && !gameLost && !gameWon) {
-        double elapsed = GetTime() - startTime;
-        timer = (int)elapsed;
-        if (timer > 999) timer = 999;
-    }
+    if (timerStarted && !gameLost && !gameWon) { timer=(int)(GetTime()-startTime); if (timer>999) timer=999; }
 }
 
 void DrawGameplay(void) {
-    int minesLeft = gameConfig.mines - flagCount;
-    if (minesLeft < 0) minesLeft = 0;
-    char mineStr[16];
-    sprintf(mineStr, "Mines: %d", minesLeft);
-    DrawText(mineStr, 20, 10, 24, WHITE);
-
-    char timeStr[16];
-    sprintf(timeStr, "Time: %d", timer);
-    DrawText(timeStr, 150, 10, 24, WHITE);
-
-    smileyRect = (Rectangle){ GetScreenWidth()/2 - 20, 5, 40, 40 };
-    Color smileyColor = gameLost ? RED : gameWon ? GREEN : YELLOW;
-    DrawRectangleRec(smileyRect, smileyColor);
-    DrawRectangleLinesEx(smileyRect, 2, WHITE);
-    DrawText(":)", (int)(smileyRect.x + 8), (int)(smileyRect.y + 6), 24, BLACK);
-
-    DrawRectangle(gridX - 5, gridY - 5,
-                  gameBoard.cols * cellSize + 10, gameBoard.rows * cellSize + 10,
-                  bgColor);
-
-    for (int r = 0; r < gameBoard.rows; r++) {
-        for (int c = 0; c < gameBoard.cols; c++) {
-            Rectangle cellRect = { gridX + c * cellSize, gridY + r * cellSize, cellSize, cellSize };
-            Cell cell = gameBoard.cells[r][c];
-
-            if (cell.state == CELL_HIDDEN) {
-                DrawRectangleRec(cellRect, cellColor);
-                DrawRectangleLines((int)cellRect.x, (int)cellRect.y, cellSize, cellSize, cellHiddenLine);
-                if (cheatActive) {
-                    if (cell.hasMine) DrawCircle((int)(cellRect.x + cellSize/2), (int)(cellRect.y + cellSize/2), cellSize/6, RED);
-                    else DrawCircle((int)(cellRect.x + cellSize/2), (int)(cellRect.y + cellSize/2), cellSize/6, GREEN);
-                }
-            } else if (cell.state == CELL_REVEALED) {
-                DrawRectangleRec(cellRect, WHITE);
-                DrawRectangleLines((int)cellRect.x, (int)cellRect.y, cellSize, cellSize, GRAY);
-                if (cell.hasMine) DrawText("*", (int)(cellRect.x + cellSize/4), (int)(cellRect.y + cellSize/4), cellSize, RED);
-                else if (cell.adjacentMines > 0) {
-                    char num[4];
-                    sprintf(num, "%d", cell.adjacentMines);
-                    DrawText(num, (int)(cellRect.x + cellSize/4), (int)(cellRect.y + cellSize/4), cellSize/2, DARKBLUE);
-                }
-            } else if (cell.state == CELL_FLAGGED) {
-                DrawRectangleRec(cellRect, cellColor);
-                DrawRectangleLines((int)cellRect.x, (int)cellRect.y, cellSize, cellSize, cellHiddenLine);
-                DrawText("F", (int)(cellRect.x + cellSize/4), (int)(cellRect.y + cellSize/4), cellSize/2, RED);
-            }
+    int ml = gameConfig.mines - flagCount; if (ml<0) ml=0;
+    char buf[32]; sprintf(buf,"Mines: %d",ml); DrawText(buf,20,10,24,WHITE);
+    sprintf(buf,"Time: %d",timer); DrawText(buf,150,10,24,WHITE);
+    smileyRect = (Rectangle){ GetScreenWidth()/2-20, 5, 40, 40 };
+    DrawRectangleRec(smileyRect, gameLost?RED:gameWon?GREEN:YELLOW);
+    DrawRectangleLinesEx(smileyRect,2,WHITE);
+    DrawText(":)", smileyRect.x+8, smileyRect.y+6, 24, BLACK);
+    DrawRectangle(gridX-5, gridY-5, gameBoard.cols*cellSize+10, gameBoard.rows*cellSize+10, bgColor);
+    for (int r=0; r<gameBoard.rows; r++) for (int c=0; c<gameBoard.cols; c++) {
+        Rectangle cr = { gridX+c*cellSize, gridY+r*cellSize, cellSize, cellSize };
+        Cell cell = gameBoard.cells[r][c];
+        if (cell.state==CELL_HIDDEN) {
+            DrawRectangleRec(cr, cellColor); DrawRectangleLines(cr.x,cr.y,cellSize,cellSize,cellHiddenLine);
+            if (cheatActive) DrawCircle(cr.x+cellSize/2, cr.y+cellSize/2, cellSize/6, cell.hasMine?RED:GREEN);
+        } else if (cell.state==CELL_REVEALED) {
+            DrawRectangleRec(cr, WHITE); DrawRectangleLines(cr.x,cr.y,cellSize,cellSize,GRAY);
+            if (cell.hasMine) DrawText("*", cr.x+cellSize/4, cr.y+cellSize/4, cellSize, RED);
+            else if (cell.adjacentMines>0) { char n[4]; sprintf(n,"%d",cell.adjacentMines); DrawText(n, cr.x+cellSize/4, cr.y+cellSize/4, cellSize/2, DARKBLUE); }
+        } else if (cell.state==CELL_FLAGGED) {
+            DrawRectangleRec(cr, cellColor); DrawRectangleLines(cr.x,cr.y,cellSize,cellSize,cellHiddenLine);
+            DrawText("F", cr.x+cellSize/4, cr.y+cellSize/4, cellSize/2, RED);
         }
     }
-
-    // Генератор
-    Rectangle genPanel = { 10, GetScreenHeight() - 70, 150, 60 };
-    DrawRectangleRec(genPanel, Fade(BLACK, 0.7f));
-    DrawRectangleLinesEx(genPanel, 2, WHITE);
-
-    Color chargeColor;
-    if (generatorCharge > 80) chargeColor = RED;
-    else if (generatorCharge > 40) chargeColor = YELLOW;
-    else chargeColor = GREEN;
-
-    if (generatorWarning) {
-        double t = GetTime();
-        if (((int)(t * 4) % 2) == 0) DrawRectangleRec(genPanel, Fade(RED, 0.3f));
+    Rectangle gen = {10, GetScreenHeight()-70,150,60};
+    DrawRectangleRec(gen, Fade(BLACK,0.7f)); DrawRectangleLinesEx(gen,2,WHITE);
+    Color cc = generatorCharge>80?RED:generatorCharge>40?YELLOW:GREEN;
+    if (generatorWarning && ((int)(GetTime()*4)%2)==0) DrawRectangleRec(gen, Fade(RED,0.3f));
+    DrawText("GENERATOR", gen.x+10, gen.y+5, 14, LIGHTGRAY);
+    sprintf(buf,"%.0f%%",generatorCharge); DrawText(buf, gen.x+gen.width/2-MeasureText(buf,20)/2, gen.y+25, 20, cc);
+    Rectangle ph = {10, GetScreenHeight()-150,150,60};
+    DrawRectangleRec(ph, Fade(BLACK,0.7f)); DrawRectangleLinesEx(ph,2,WHITE);
+    DrawText("PHASE", ph.x+10, ph.y+5, 14, LIGHTGRAY);
+    sprintf(buf,"%d/5",phaseEnemyPhase); DrawText(buf, ph.x+ph.width/2-MeasureText(buf,20)/2, ph.y+25, 20, WHITE);
+    if (phaseEnemyPhase<5 && !gameLost && !gameWon) {
+        float p = phaseEnemyTimer/PHASE_TRANSITION_TIME; int bw=ph.width-20, bx=ph.x+10, by=ph.y+48;
+        DrawRectangle(bx,by,bw,4,DARKGRAY); DrawRectangle(bx,by,bw*p,4,RED);
     }
-
-    DrawText("GENERATOR", (int)genPanel.x + 10, (int)genPanel.y + 5, 14, LIGHTGRAY);
-    char genStr[16];
-    sprintf(genStr, "%.0f%%", generatorCharge);
-    int fontSize = 20;
-    int textW = MeasureText(genStr, fontSize);
-    DrawText(genStr, (int)(genPanel.x + genPanel.width/2 - textW/2), (int)(genPanel.y + 25), fontSize, chargeColor);
-
-    // Фазовый враг
-    Rectangle phasePanel = { 10, GetScreenHeight() - 150, 150, 60 };
-    DrawRectangleRec(phasePanel, Fade(BLACK, 0.7f));
-    DrawRectangleLinesEx(phasePanel, 2, WHITE);
-    DrawText("PHASE", (int)phasePanel.x + 10, (int)phasePanel.y + 5, 14, LIGHTGRAY);
-    char phaseStr[8];
-    sprintf(phaseStr, "%d/5", phaseEnemyPhase);
-    DrawText(phaseStr, (int)(phasePanel.x + phasePanel.width/2 - MeasureText(phaseStr, 20)/2), (int)(phasePanel.y + 25), 20, WHITE);
-
-    if (phaseEnemyPhase < 5 && !gameLost && !gameWon) {
-        float progress = (float)(phaseEnemyTimer / PHASE_TRANSITION_TIME);
-        int barWidth = (int)(phasePanel.width - 20);
-        int barX = (int)phasePanel.x + 10;
-        int barY = (int)phasePanel.y + 48;
-        int barHeight = 4;
-        DrawRectangle(barX, barY, barWidth, barHeight, DARKGRAY);
-        DrawRectangle(barX, barY, (int)(barWidth * progress), barHeight, RED);
-    }
-
-    DrawRectangleRec(phaseEnemyResetBtn, GRAY);
-    DrawRectangleLinesEx(phaseEnemyResetBtn, 1, WHITE);
-    DrawText("<<", (int)(phaseEnemyResetBtn.x + 12), (int)(phaseEnemyResetBtn.y + 5), 18, WHITE);
-
-    // QTE враг
+    DrawRectangleRec(phaseEnemyResetBtn, GRAY); DrawRectangleLinesEx(phaseEnemyResetBtn,1,WHITE);
+    DrawText("<<", phaseEnemyResetBtn.x+12, phaseEnemyResetBtn.y+5, 18, WHITE);
     if (qteActive) {
-        DrawRectangleRec(qteWindowRect, Fade(BLACK, 0.85f));
-        DrawRectangleLinesEx(qteWindowRect, 2, RED);
-
-        float midY = qteWindowRect.y + qteWindowRect.height / 2;
-        DrawLine((int)qteWindowRect.x, (int)midY, (int)(qteWindowRect.x + qteWindowRect.width), (int)midY, RED);
-
-        char progressText[16];
-        sprintf(progressText, "%d/5", qteCurrentIndex);
-        int progressFontSize = 24;
-        DrawText(progressText, (int)(qteWindowRect.x + qteWindowRect.width/2 - MeasureText(progressText, progressFontSize)/2),
-                 (int)(qteWindowRect.y + 5), progressFontSize, YELLOW);
-
-        const char* directionStr[] = { "Press Up", "Press Down", "Press Left", "Press Right" };
-        int expectedIdx = qteCurrentIndex < 5 ? qteSequence[qteCurrentIndex] : 0;
-        int dirFontSize = 16;
-        DrawText(directionStr[expectedIdx],
-                 (int)(qteWindowRect.x + qteWindowRect.width/2 - MeasureText(directionStr[expectedIdx], dirFontSize)/2),
-                 (int)(midY + 10), dirFontSize, WHITE);
-
-        float timeFraction = (float)(qteTimeLeft / 9.0);
-        int barY = (int)(qteWindowRect.y + qteWindowRect.height - 6);
-        DrawRectangle((int)qteWindowRect.x + 2, barY, (int)qteWindowRect.width - 4, 4, DARKGRAY);
-        DrawRectangle((int)qteWindowRect.x + 2, barY, (int)((qteWindowRect.width - 4) * timeFraction), 4, RED);
+        DrawRectangleRec(qteWindowRect, Fade(BLACK,0.85f)); DrawRectangleLinesEx(qteWindowRect,2,RED);
+        float my = qteWindowRect.y+qteWindowRect.height/2;
+        DrawLine(qteWindowRect.x,my, qteWindowRect.x+qteWindowRect.width,my,RED);
+        char p[16]; sprintf(p,"%d/5",qteCurrentIndex);
+        DrawText(p, qteWindowRect.x+qteWindowRect.width/2-MeasureText(p,24)/2, qteWindowRect.y+5, 24, YELLOW);
+        const char* d[] = {"Press Up","Press Down","Press Left","Press Right"};
+        int id = qteCurrentIndex<5 ? qteSequence[qteCurrentIndex] : 0;
+        DrawText(d[id], qteWindowRect.x+qteWindowRect.width/2-MeasureText(d[id],16)/2, my+10, 16, WHITE);
+        float fr = qteTimeLeft/9.0f; int by = qteWindowRect.y+qteWindowRect.height-6;
+        DrawRectangle(qteWindowRect.x+2,by,qteWindowRect.width-4,4,DARKGRAY);
+        DrawRectangle(qteWindowRect.x+2,by,(qteWindowRect.width-4)*fr,4,RED);
     }
-
-    DrawJumpscare();
-    DrawSpam();
-    DrawAlign();
-
-    if (gameLost) DrawText("YOU LOST! (ENTER to menu)", GetScreenWidth()/2 - MeasureText("YOU LOST! (ENTER to menu)", 30)/2, 45, 30, RED);
-    else if (gameWon) DrawText("YOU WIN! (ENTER to menu)", GetScreenWidth()/2 - MeasureText("YOU WIN! (ENTER to menu)", 30)/2, 45, 30, GREEN);
+    DrawJumpscare(); DrawSpam(); DrawAlign();
+    if (gameLost) DrawText("YOU LOST! (ENTER to menu)", GetScreenWidth()/2-MeasureText("YOU LOST! (ENTER to menu)",30)/2,45,30,RED);
+    else if (gameWon) DrawText("YOU WIN! (ENTER to menu)", GetScreenWidth()/2-MeasureText("YOU WIN! (ENTER to menu)",30)/2,45,30,GREEN);
 }
 
 void UpdateSettings(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-        for (int i = 0; i < 4; i++) {
+        for (int i=0;i<4;i++) {
             if (IsMouseOverButton(bgColorBtns[i])) bgColor = bgColorOptions[i];
             if (IsMouseOverButton(cellColorBtns[i])) {
                 cellColor = cellColorOptions[i];
-                cellHiddenLine.r = (unsigned char)(cellColor.r * 0.6f);
-                cellHiddenLine.g = (unsigned char)(cellColor.g * 0.6f);
-                cellHiddenLine.b = (unsigned char)(cellColor.b * 0.6f);
-                cellHiddenLine.a = 255;
+                cellHiddenLine.r = cellColor.r*0.6f; cellHiddenLine.g = cellColor.g*0.6f; cellHiddenLine.b = cellColor.b*0.6f; cellHiddenLine.a=255;
             }
         }
-        if (IsMouseOverButton(backFromSettingsBtn)) currentScreen = SCREEN_MENU;
+        if (IsMouseOverButton(backFromSettingsBtn)) currentScreen=SCREEN_MENU;
     }
 }
 
 void DrawSettings(void) {
-    DrawText("SETTINGS", GetScreenWidth()/2 - MeasureText("SETTINGS", 40)/2, 80, 40, WHITE);
-    DrawText("Background Color:", GetScreenWidth()/2 - MeasureText("Background Color:", 20)/2, 170, 20, LIGHTGRAY);
-    for (int i = 0; i < 4; i++) {
-        DrawRectangleRec(bgColorBtns[i].bounds, bgColorBtns[i].color);
-        DrawRectangleLinesEx(bgColorBtns[i].bounds, 2, WHITE);
-    }
-    DrawText("Cell Color:", GetScreenWidth()/2 - MeasureText("Cell Color:", 20)/2, 270, 20, LIGHTGRAY);
-    for (int i = 0; i < 4; i++) {
-        DrawRectangleRec(cellColorBtns[i].bounds, cellColorBtns[i].color);
-        DrawRectangleLinesEx(cellColorBtns[i].bounds, 2, WHITE);
-    }
+    DrawText("SETTINGS", GetScreenWidth()/2-MeasureText("SETTINGS",40)/2,80,40,WHITE);
+    DrawText("Background Color:", GetScreenWidth()/2-MeasureText("Background Color:",20)/2,170,20,LIGHTGRAY);
+    for (int i=0;i<4;i++) { DrawRectangleRec(bgColorBtns[i].bounds, bgColorBtns[i].color); DrawRectangleLinesEx(bgColorBtns[i].bounds,2,WHITE); }
+    DrawText("Cell Color:", GetScreenWidth()/2-MeasureText("Cell Color:",20)/2,270,20,LIGHTGRAY);
+    for (int i=0;i<4;i++) { DrawRectangleRec(cellColorBtns[i].bounds, cellColorBtns[i].color); DrawRectangleLinesEx(cellColorBtns[i].bounds,2,WHITE); }
     DrawButton(backFromSettingsBtn);
 }
 
-void UpdateStats(void) {
-    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-        if (IsMouseOverButton(backFromStatsBtn)) currentScreen = SCREEN_MENU;
-    }
-}
-
+void UpdateStats(void) { if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && IsMouseOverButton(backFromStatsBtn)) currentScreen=SCREEN_MENU; }
 void DrawStats(void) {
-    DrawText("STATISTICS", GetScreenWidth()/2 - MeasureText("STATISTICS", 40)/2, 60, 40, WHITE);
-    char playStr[32]; sprintf(playStr, "Games played: %d", gamesPlayed);
-    DrawText(playStr, GetScreenWidth()/2 - MeasureText(playStr, 24)/2, 160, 24, WHITE);
-    char winStr[32]; sprintf(winStr, "Wins: %d", gamesWon);
-    DrawText(winStr, GetScreenWidth()/2 - MeasureText(winStr, 24)/2, 210, 24, GREEN);
-    char loseStr[32]; sprintf(loseStr, "Losses: %d", gamesLost);
-    DrawText(loseStr, GetScreenWidth()/2 - MeasureText(loseStr, 24)/2, 260, 24, RED);
-    if (gamesPlayed > 0) {
-        float winRate = (float)gamesWon / gamesPlayed * 100.0f;
-        char rateStr[32]; sprintf(rateStr, "Win rate: %.1f%%", winRate);
-        DrawText(rateStr, GetScreenWidth()/2 - MeasureText(rateStr, 24)/2, 310, 24, YELLOW);
-    } else DrawText("Win rate: --", GetScreenWidth()/2 - MeasureText("Win rate: --", 24)/2, 310, 24, LIGHTGRAY);
+    DrawText("STATISTICS", GetScreenWidth()/2-MeasureText("STATISTICS",40)/2,60,40,WHITE);
+    char s[64]; sprintf(s,"Games played: %d",gamesPlayed); DrawText(s, GetScreenWidth()/2-MeasureText(s,24)/2,160,24,WHITE);
+    sprintf(s,"Wins: %d",gamesWon); DrawText(s, GetScreenWidth()/2-MeasureText(s,24)/2,210,24,GREEN);
+    sprintf(s,"Losses: %d",gamesLost); DrawText(s, GetScreenWidth()/2-MeasureText(s,24)/2,260,24,RED);
+    if (gamesPlayed>0) { sprintf(s,"Win rate: %.1f%%", (float)gamesWon/gamesPlayed*100); DrawText(s, GetScreenWidth()/2-MeasureText(s,24)/2,310,24,YELLOW); }
+    else DrawText("Win rate: --", GetScreenWidth()/2-MeasureText("Win rate: --",24)/2,310,24,LIGHTGRAY);
     DrawButton(backFromStatsBtn);
 }
 
-void UpdateMinigame(void) { if (IsKeyPressed(KEY_ESCAPE)) currentScreen = SCREEN_GAMEPLAY; }
-void DrawMinigame(void) { DrawText("MINIGAME", 100, 100, 30, WHITE); }
-void UpdateGameOver(void) { if (IsKeyPressed(KEY_ENTER)) currentScreen = SCREEN_MENU; }
-void DrawGameOver(void) { DrawText("GAME OVER (press ENTER to menu)", 100, 100, 30, RED); }
-void UpdateVictory(void) { if (IsKeyPressed(KEY_ENTER)) currentScreen = SCREEN_MENU; }
-void DrawVictory(void) { DrawText("VICTORY! (press ENTER to menu)", 100, 100, 30, GREEN); }
+void UpdateMinigame(void) { if (IsKeyPressed(KEY_ESCAPE)) currentScreen=SCREEN_GAMEPLAY; }
+void DrawMinigame(void) { DrawText("MINIGAME",100,100,30,WHITE); }
+void UpdateGameOver(void) { if (IsKeyPressed(KEY_ENTER)) currentScreen=SCREEN_MENU; }
+void DrawGameOver(void) { DrawText("GAME OVER (press ENTER to menu)",100,100,30,RED); }
+void UpdateVictory(void) { if (IsKeyPressed(KEY_ENTER)) currentScreen=SCREEN_MENU; }
+void DrawVictory(void) { DrawText("VICTORY! (press ENTER to menu)",100,100,30,GREEN); }
 
-int main(void)
-{
-    InitWindow(800, 600, "Sweeper");
-    SetWindowMinSize(640, 480);
-    InitMenuButtons();
-    InitDifficultyButtons();
-    LoadData();
-    srand((unsigned int)time(NULL));
-
-    while (!WindowShouldClose())
-    {
-        if (IsWindowResized() && !fullscreen) {
-            RecalculateButtons();
-            if (currentScreen == SCREEN_GAMEPLAY) RecalculateGrid();
-        }
-
+int main(void) {
+    InitWindow(800,600,"Sweeper"); SetWindowMinSize(640,480);
+    InitMenuButtons(); InitDifficultyButtons(); LoadData(); srand((unsigned int)time(NULL));
+    while (!WindowShouldClose()) {
+        if (IsWindowResized() && !fullscreen) { RecalculateButtons(); if (currentScreen==SCREEN_GAMEPLAY) RecalculateGrid(); }
         switch (currentScreen) {
-            case SCREEN_MENU:       UpdateMenu();       break;
+            case SCREEN_MENU: UpdateMenu(); break;
             case SCREEN_DIFFICULTY: UpdateDifficulty(); break;
-            case SCREEN_GAMEPLAY:   UpdateGameplay();   break;
-            case SCREEN_MINIGAME:   UpdateMinigame();   break;
-            case SCREEN_GAME_OVER:  UpdateGameOver();   break;
-            case SCREEN_VICTORY:    UpdateVictory();    break;
-            case SCREEN_SETTINGS:   UpdateSettings();   break;
-            case SCREEN_STATS:      UpdateStats();      break;
+            case SCREEN_GAMEPLAY: UpdateGameplay(); break;
+            case SCREEN_MINIGAME: UpdateMinigame(); break;
+            case SCREEN_GAME_OVER: UpdateGameOver(); break;
+            case SCREEN_VICTORY: UpdateVictory(); break;
+            case SCREEN_SETTINGS: UpdateSettings(); break;
+            case SCREEN_STATS: UpdateStats(); break;
         }
-
         UpdateCheatInput();
-
-        BeginDrawing();
-        ClearBackground(DARKGRAY);
-
+        BeginDrawing(); ClearBackground(DARKGRAY);
         switch (currentScreen) {
-            case SCREEN_MENU:       DrawMenu();       break;
+            case SCREEN_MENU: DrawMenu(); break;
             case SCREEN_DIFFICULTY: DrawDifficulty(); break;
-            case SCREEN_GAMEPLAY:   DrawGameplay();   break;
-            case SCREEN_MINIGAME:   DrawMinigame();   break;
-            case SCREEN_GAME_OVER:  DrawGameOver();   break;
-            case SCREEN_VICTORY:    DrawVictory();    break;
-            case SCREEN_SETTINGS:   DrawSettings();   break;
-            case SCREEN_STATS:      DrawStats();      break;
+            case SCREEN_GAMEPLAY: DrawGameplay(); break;
+            case SCREEN_MINIGAME: DrawMinigame(); break;
+            case SCREEN_GAME_OVER: DrawGameOver(); break;
+            case SCREEN_VICTORY: DrawVictory(); break;
+            case SCREEN_SETTINGS: DrawSettings(); break;
+            case SCREEN_STATS: DrawStats(); break;
         }
-
         EndDrawing();
     }
-
-    SaveData();
-    CloseWindow();
-    return 0;
+    SaveData(); CloseWindow(); return 0;
 }
