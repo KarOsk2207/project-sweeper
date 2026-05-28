@@ -94,7 +94,6 @@ double spamCooldownTimer = 0.0;
 double spamSpawnTimer = 0.0;
 bool spamSpawnCooldown = false;
 
-// Align враг
 bool alignActive = false;
 int alignCountdown = 8;
 double alignTimer = 0.0;
@@ -141,7 +140,7 @@ Color cellColorOptions[4] = {
     { 180, 255, 180, 255 }
 };
 
-// Прототипы функций отрисовки врагов
+// Прототипы
 void DrawJumpscare(void);
 void DrawSpam(void);
 void DrawAlign(void);
@@ -592,54 +591,6 @@ void UpdateSpam(void) {
     }
 }
 
-// Заглушка отрисовки Jumpscare (должна быть определена)
-void DrawJumpscare(void) {
-    if (!jumpscareActive) return;
-
-    int w = GetScreenWidth();
-    int h = GetScreenHeight();
-
-    if (jumpscarePhase == 0) {
-        DrawText("PREPARE", w/2 - MeasureText("PREPARE", 40)/2, h - 50, 40, WHITE);
-    } else {
-        float size = 0.0f;
-        if (jumpscarePhase == 1) {
-            float t = (float)(jumpscareTimer / 2.0);
-            if (t > 1.0f) t = 1.0f;
-            size = t * (w * 0.7f);
-        } else {
-            float t = (float)(jumpscareTimer / 2.0);
-            if (t > 1.0f) t = 1.0f;
-            size = w * 0.7f + t * (w * 0.2f);
-        }
-
-        float x = w/2 - size/2;
-        float y = h/2 - size/2;
-        Color cubeColor = (jumpscarePhase == 1) ? YELLOW : RED;
-        DrawRectangle((int)x, (int)y, (int)size, (int)size, cubeColor);
-    }
-}
-
-// Заглушка отрисовки Spam (будет улучшена во втором коммите для спама, но здесь нужна хотя бы пустая, чтобы не было ошибки)
-void DrawSpam(void) {
-    if (!spamActive) return;
-
-    DrawText("SPAM ALT!", GetScreenWidth()/2 - MeasureText("SPAM ALT!", 30)/2, GetScreenHeight()/2 - 60, 30, WHITE);
-    char countStr[8];
-    sprintf(countStr, "%d", spamCountdown);
-    DrawText(countStr, GetScreenWidth()/2 - MeasureText(countStr, 40)/2, GetScreenHeight()/2, 40, RED);
-}
-
-// Заглушка отрисовки Align (будет улучшена во втором коммите)
-void DrawAlign(void) {
-    if (!alignActive) return;
-
-    DrawText("ALIGN", GetScreenWidth()/2 - MeasureText("ALIGN", 30)/2, GetScreenHeight()/2 - 60, 30, WHITE);
-    char countStr[8];
-    sprintf(countStr, "%d", alignCountdown);
-    DrawText(countStr, GetScreenWidth()/2 - MeasureText(countStr, 40)/2, GetScreenHeight()/2, 40, RED);
-}
-
 void UpdateAlign(void) {
     if (cheatActive) {
         if (alignActive) { activeDynamicEnemies--; }
@@ -672,6 +623,42 @@ void UpdateAlign(void) {
                 alignTimer = 0.0;
                 for (int i = 0; i < 3; i++) alignCubesDone[i] = false;
                 alignDragging = -1;
+
+                Rectangle mainRect = {
+                    GetScreenWidth()/2 - 150,
+                    GetScreenHeight()/2 - 110,
+                    300, 220
+                };
+                float subH = 50;
+                float padding = 10;
+                float zoneW = 60;
+                float zoneH = 20;
+                float cubeSize = 20;
+
+                for (int i = 0; i < 3; i++) {
+                    alignSubRects[i] = (Rectangle){
+                        mainRect.x + padding,
+                        mainRect.y + 60 + i * (subH + 5),
+                        mainRect.width - 2 * padding,
+                        subH
+                    };
+                    float zoneY = alignSubRects[i].y + rand() % (int)(subH - zoneH);
+                    alignZoneRects[i] = (Rectangle){
+                        alignSubRects[i].x + alignSubRects[i].width - zoneW - 5,
+                        zoneY,
+                        zoneW, zoneH
+                    };
+                    float cubeY;
+                    do {
+                        cubeY = alignSubRects[i].y + rand() % (int)(subH - cubeSize);
+                    } while (cubeY + cubeSize > alignZoneRects[i].y - 2 &&
+                             cubeY < alignZoneRects[i].y + zoneH + 2);
+                    alignCubeRects[i] = (Rectangle){
+                        alignSubRects[i].x + 5,
+                        cubeY,
+                        cubeSize, cubeSize
+                    };
+                }
                 activeDynamicEnemies++;
             }
         }
@@ -684,11 +671,132 @@ void UpdateAlign(void) {
                 if (!gameLost) gameLost = true;
                 alignActive = false;
                 activeDynamicEnemies--;
+                return;
             }
+        }
+
+        Vector2 mouse = GetMousePosition();
+        if (IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+            if (alignDragging == -1) {
+                for (int i = 0; i < 3; i++) {
+                    if (!alignCubesDone[i] && CheckCollisionPointRec(mouse, alignCubeRects[i])) {
+                        alignDragging = i;
+                        break;
+                    }
+                }
+            }
+            if (alignDragging != -1) {
+                Rectangle* cube = &alignCubeRects[alignDragging];
+                cube->y = mouse.y - cube->height/2;
+                if (cube->y < alignSubRects[alignDragging].y)
+                    cube->y = alignSubRects[alignDragging].y;
+                if (cube->y + cube->height > alignSubRects[alignDragging].y + alignSubRects[alignDragging].height)
+                    cube->y = alignSubRects[alignDragging].y + alignSubRects[alignDragging].height - cube->height;
+
+                if (CheckCollisionRecs(*cube, alignZoneRects[alignDragging])) {
+                    alignCubesDone[alignDragging] = true;
+                    alignDragging = -1;
+                }
+            }
+        } else {
+            alignDragging = -1;
+        }
+
+        if (alignCubesDone[0] && alignCubesDone[1] && alignCubesDone[2]) {
+            alignActive = false;
+            alignSpawnCooldown = true;
+            alignCooldownTimer = 10.0;
+            activeDynamicEnemies--;
         }
     }
 }
 
+// --------------------- Отрисовка врагов ---------------------
+void DrawJumpscare(void) {
+    if (!jumpscareActive) return;
+
+    int w = GetScreenWidth();
+    int h = GetScreenHeight();
+
+    if (jumpscarePhase == 0) {
+        DrawText("PREPARE", w/2 - MeasureText("PREPARE", 40)/2, h - 50, 40, WHITE);
+    } else {
+        float size = 0.0f;
+        if (jumpscarePhase == 1) {
+            float t = (float)(jumpscareTimer / 2.0);
+            if (t > 1.0f) t = 1.0f;
+            size = t * (w * 0.7f);
+        } else {
+            float t = (float)(jumpscareTimer / 2.0);
+            if (t > 1.0f) t = 1.0f;
+            size = w * 0.7f + t * (w * 0.2f);
+        }
+
+        float x = w/2 - size/2;
+        float y = h/2 - size/2;
+        Color cubeColor = (jumpscarePhase == 1) ? YELLOW : RED;
+        DrawRectangle((int)x, (int)y, (int)size, (int)size, cubeColor);
+    }
+}
+
+void DrawSpam(void) {
+    if (!spamActive) return;
+
+    Rectangle spamRect = {
+        (float)(GetScreenWidth()/2 - 150),
+        (float)(GetScreenHeight()/2 - 60),
+        300, 120
+    };
+    DrawRectangleRec(spamRect, Fade(BLACK, 0.85f));
+    DrawRectangleLinesEx(spamRect, 2, RED);
+
+    DrawText("SPAM ALT!", (int)(spamRect.x + spamRect.width/2 - MeasureText("SPAM ALT!", 24)/2),
+             (int)(spamRect.y + 5), 24, WHITE);
+
+    char countStr[8];
+    sprintf(countStr, "%d", spamCountdown);
+    int countSize = 40;
+    DrawText(countStr,
+             (int)(spamRect.x + spamRect.width/2 - MeasureText(countStr, countSize)/2),
+             (int)(spamRect.y + 35),
+             countSize, (spamCountdown <= 2) ? RED : YELLOW);
+
+    int barX = (int)spamRect.x + 15;
+    int barY = (int)spamRect.y + 85;
+    int barWidth = (int)spamRect.width - 30;
+    int barHeight = 10;
+    DrawRectangle(barX, barY, barWidth, barHeight, DARKGRAY);
+    DrawRectangle(barX, barY, (int)(barWidth * (spamProgress / 100.0f)), barHeight, GREEN);
+    DrawRectangleLines(barX, barY, barWidth, barHeight, WHITE);
+}
+
+void DrawAlign(void) {
+    if (!alignActive) return;
+
+    Rectangle mainRect = {
+        GetScreenWidth()/2 - 150,
+        GetScreenHeight()/2 - 110,
+        300, 220
+    };
+    DrawRectangleRec(mainRect, Fade(BLACK, 0.85f));
+    DrawRectangleLinesEx(mainRect, 2, RED);
+
+    DrawText("ALIGN", mainRect.x + mainRect.width/2 - MeasureText("ALIGN", 24)/2, mainRect.y + 5, 24, WHITE);
+    char countStr[8];
+    sprintf(countStr, "%d", alignCountdown);
+    DrawText(countStr, mainRect.x + mainRect.width/2 - MeasureText(countStr, 40)/2, mainRect.y + 30, 40, RED);
+
+    for (int i = 0; i < 3; i++) {
+        DrawRectangleRec(alignSubRects[i], Fade(DARKGRAY, 0.5f));
+        DrawRectangleLinesEx(alignSubRects[i], 1, LIGHTGRAY);
+
+        DrawRectangleRec(alignZoneRects[i], GREEN);
+        Color cubeColor = alignCubesDone[i] ? GRAY : RED;
+        DrawRectangleRec(alignCubeRects[i], cubeColor);
+    }
+}
+
+// --------------------- Остальные экраны ---------------------
 void UpdateMenu(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         if (IsMouseOverButton(newGameBtn)) currentScreen = SCREEN_DIFFICULTY;
@@ -952,7 +1060,6 @@ void DrawGameplay(void) {
         DrawRectangle((int)qteWindowRect.x + 2, barY, (int)((qteWindowRect.width - 4) * timeFraction), 4, RED);
     }
 
-    // Отрисовка всех врагов
     DrawJumpscare();
     DrawSpam();
     DrawAlign();
