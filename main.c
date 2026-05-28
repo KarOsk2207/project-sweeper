@@ -50,6 +50,12 @@ bool gameEndCounted = false;
 bool cheatActive = false;
 char inputBuffer[6] = "";
 
+bool fullscreen = false;
+
+int cellSize = 30;
+int gridX = 50;
+int gridY = 80;
+
 Button newGameBtn;
 Button settingsBtn;
 Button statsBtn;
@@ -81,9 +87,23 @@ Color cellColorOptions[4] = {
     { 180, 255, 180, 255 }
 };
 
-#define CELL_SIZE  30
-#define GRID_X     50
-#define GRID_Y     80
+void RecalculateGrid(void) {
+    int w = GetScreenWidth();
+    int h = GetScreenHeight();
+    int topMargin = 80;
+    int bottomMargin = 20;
+    int sideMargin = 20;
+    int availW = w - 2 * sideMargin;
+    int availH = h - topMargin - bottomMargin;
+    int maxCellW = availW / gameBoard.cols;
+    int maxCellH = availH / gameBoard.rows;
+    cellSize = (maxCellW < maxCellH) ? maxCellW : maxCellH;
+    if (cellSize < 10) cellSize = 10;
+    if (cellSize > 50) cellSize = 50;
+    gridX = (w - gameBoard.cols * cellSize) / 2;
+    gridY = topMargin + (availH - gameBoard.rows * cellSize) / 2;
+    if (gridY < topMargin) gridY = topMargin;
+}
 
 void ResetGame(void) {
     BoardInit(&gameBoard, gameConfig.rows, gameConfig.cols, gameConfig.mines);
@@ -95,12 +115,12 @@ void ResetGame(void) {
     startTime = 0.0;
     gameEndCounted = false;
     gamesPlayed++;
+    RecalculateGrid();
 }
 
 void InitMenuButtons(void) {
     float btnWidth = 200, btnHeight = 50;
     float centerX = (800 - btnWidth) / 2.0f;
-
     newGameBtn.bounds = (Rectangle){ centerX, 160, btnWidth, btnHeight };
     newGameBtn.text = "New Game";
     newGameBtn.color = DARKGREEN;
@@ -170,6 +190,29 @@ void InitDifficultyButtons(void) {
     }
 }
 
+void RecalculateButtons(void) {
+    int w = GetScreenWidth();
+    float centerX = (w - 200) / 2.0f;
+    newGameBtn.bounds.x = centerX;
+    settingsBtn.bounds.x = centerX;
+    statsBtn.bounds.x = centerX;
+    exitBtn.bounds.x = centerX;
+
+    centerX = (w - 220) / 2.0f;
+    easyBtn.bounds.x = centerX;
+    mediumBtn.bounds.x = centerX;
+    hardBtn.bounds.x = centerX;
+    backBtn.bounds.x = centerX;
+    backFromSettingsBtn.bounds.x = centerX;
+    backFromStatsBtn.bounds.x = centerX;
+
+    float startX = (w - 4 * 110) / 2.0f;
+    for (int i = 0; i < 4; i++) {
+        bgColorBtns[i].bounds.x = startX + i * 110;
+        cellColorBtns[i].bounds.x = startX + i * 110;
+    }
+}
+
 bool IsMouseOverButton(Button btn) {
     return CheckCollisionPointRec(GetMousePosition(), btn.bounds);
 }
@@ -178,7 +221,6 @@ void DrawButton(Button btn) {
     Color color = IsMouseOverButton(btn) ? btn.hoverColor : btn.color;
     DrawRectangleRec(btn.bounds, color);
     DrawRectangleLinesEx(btn.bounds, 2, WHITE);
-
     int textWidth = MeasureText(btn.text, 20);
     float textX = btn.bounds.x + (btn.bounds.width - textWidth) / 2.0f;
     float textY = btn.bounds.y + (btn.bounds.height - 20) / 2.0f;
@@ -192,7 +234,6 @@ void UpdateCheatInput(void) {
         memmove(inputBuffer, inputBuffer + 1, 4);
         inputBuffer[4] = c;
         inputBuffer[5] = '\0';
-
         if (strcmp(inputBuffer, "IDDQD") == 0) {
             cheatActive = !cheatActive;
             inputBuffer[0] = '\0';
@@ -200,26 +241,17 @@ void UpdateCheatInput(void) {
     }
 }
 
-// ---------------------------------------------------------------------------
 void UpdateMenu(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-        if (IsMouseOverButton(newGameBtn)) {
-            currentScreen = SCREEN_DIFFICULTY;
-        }
-        if (IsMouseOverButton(settingsBtn)) {
-            currentScreen = SCREEN_SETTINGS;
-        }
-        if (IsMouseOverButton(statsBtn)) {
-            currentScreen = SCREEN_STATS;
-        }
-        if (IsMouseOverButton(exitBtn)) {
-            CloseWindow();
-        }
+        if (IsMouseOverButton(newGameBtn)) currentScreen = SCREEN_DIFFICULTY;
+        if (IsMouseOverButton(settingsBtn)) currentScreen = SCREEN_SETTINGS;
+        if (IsMouseOverButton(statsBtn)) currentScreen = SCREEN_STATS;
+        if (IsMouseOverButton(exitBtn)) CloseWindow();
     }
 }
 
 void DrawMenu(void) {
-    DrawText("SWEEPER", 300, 60, 50, WHITE);
+    DrawText("SWEEPER", GetScreenWidth()/2 - MeasureText("SWEEPER", 50)/2, 60, 50, WHITE);
     DrawButton(newGameBtn);
     DrawButton(settingsBtn);
     DrawButton(statsBtn);
@@ -243,14 +275,12 @@ void UpdateDifficulty(void) {
             ResetGame();
             currentScreen = SCREEN_GAMEPLAY;
         }
-        if (IsMouseOverButton(backBtn)) {
-            currentScreen = SCREEN_MENU;
-        }
+        if (IsMouseOverButton(backBtn)) currentScreen = SCREEN_MENU;
     }
 }
 
 void DrawDifficulty(void) {
-    DrawText("SELECT DIFFICULTY", 230, 100, 40, WHITE);
+    DrawText("SELECT DIFFICULTY", GetScreenWidth()/2 - MeasureText("SELECT DIFFICULTY", 40)/2, 100, 40, WHITE);
     DrawButton(easyBtn);
     DrawButton(mediumBtn);
     DrawButton(hardBtn);
@@ -258,6 +288,20 @@ void DrawDifficulty(void) {
 }
 
 void UpdateGameplay(void) {
+    if (IsKeyPressed(KEY_F11)) {
+        fullscreen = !fullscreen;
+        if (fullscreen) {
+            int monitor = GetCurrentMonitor();
+            SetWindowSize(GetMonitorWidth(monitor), GetMonitorHeight(monitor));
+            ToggleFullscreen();
+        } else {
+            ToggleFullscreen();
+            SetWindowSize(800, 600);
+        }
+        RecalculateGrid();
+        RecalculateButtons();
+    }
+
     if (gameLost || gameWon) {
         if (!gameEndCounted) {
             if (gameLost) gamesLost++;
@@ -279,8 +323,8 @@ void UpdateGameplay(void) {
 
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
         Vector2 mouse = GetMousePosition();
-        int col = (int)((mouse.x - GRID_X) / CELL_SIZE);
-        int row = (int)((mouse.y - GRID_Y) / CELL_SIZE);
+        int col = (int)((mouse.x - gridX) / cellSize);
+        int row = (int)((mouse.y - gridY) / cellSize);
 
         if (row >= 0 && row < gameBoard.rows && col >= 0 && col < gameBoard.cols) {
             if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
@@ -325,69 +369,53 @@ void DrawGameplay(void) {
     sprintf(timeStr, "Time: %d", timer);
     DrawText(timeStr, 150, 10, 24, WHITE);
 
-    smileyRect = (Rectangle){ 350, 5, 40, 40 };
+    smileyRect = (Rectangle){ GetScreenWidth()/2 - 20, 5, 40, 40 };
     Color smileyColor = gameLost ? RED : gameWon ? GREEN : YELLOW;
     DrawRectangleRec(smileyRect, smileyColor);
     DrawRectangleLinesEx(smileyRect, 2, WHITE);
     DrawText(":)", (int)(smileyRect.x + 8), (int)(smileyRect.y + 6), 24, BLACK);
 
-    DrawRectangle(GRID_X - 5, GRID_Y - 5,
-                  gameBoard.cols * CELL_SIZE + 10, gameBoard.rows * CELL_SIZE + 10,
+    DrawRectangle(gridX - 5, gridY - 5,
+                  gameBoard.cols * cellSize + 10, gameBoard.rows * cellSize + 10,
                   bgColor);
 
     for (int r = 0; r < gameBoard.rows; r++) {
         for (int c = 0; c < gameBoard.cols; c++) {
-            Rectangle cellRect = {
-                GRID_X + c * CELL_SIZE,
-                GRID_Y + r * CELL_SIZE,
-                CELL_SIZE, CELL_SIZE
-            };
-
+            Rectangle cellRect = { gridX + c * cellSize, gridY + r * cellSize, cellSize, cellSize };
             Cell cell = gameBoard.cells[r][c];
 
             if (cell.state == CELL_HIDDEN) {
                 DrawRectangleRec(cellRect, cellColor);
-                DrawRectangleLines((int)cellRect.x, (int)cellRect.y, CELL_SIZE, CELL_SIZE, cellHiddenLine);
-
-                // ит-индикаторы на скрытых клетках
+                DrawRectangleLines((int)cellRect.x, (int)cellRect.y, cellSize, cellSize, cellHiddenLine);
                 if (cheatActive) {
-                    if (cell.hasMine) {
-                        DrawCircle((int)(cellRect.x + CELL_SIZE/2), (int)(cellRect.y + CELL_SIZE/2), 5, RED);
-                    } else {
-                        DrawCircle((int)(cellRect.x + CELL_SIZE/2), (int)(cellRect.y + CELL_SIZE/2), 5, GREEN);
-                    }
+                    if (cell.hasMine) DrawCircle((int)(cellRect.x + cellSize/2), (int)(cellRect.y + cellSize/2), cellSize/6, RED);
+                    else DrawCircle((int)(cellRect.x + cellSize/2), (int)(cellRect.y + cellSize/2), cellSize/6, GREEN);
                 }
             } else if (cell.state == CELL_REVEALED) {
                 DrawRectangleRec(cellRect, WHITE);
-                DrawRectangleLines((int)cellRect.x, (int)cellRect.y, CELL_SIZE, CELL_SIZE, GRAY);
-                if (cell.hasMine) {
-                    DrawText("*", (int)(cellRect.x + 8), (int)(cellRect.y + 5), 24, RED);
-                } else if (cell.adjacentMines > 0) {
+                DrawRectangleLines((int)cellRect.x, (int)cellRect.y, cellSize, cellSize, GRAY);
+                if (cell.hasMine) DrawText("*", (int)(cellRect.x + cellSize/4), (int)(cellRect.y + cellSize/4), cellSize, RED);
+                else if (cell.adjacentMines > 0) {
                     char num[4];
                     sprintf(num, "%d", cell.adjacentMines);
-                    DrawText(num, (int)(cellRect.x + 8), (int)(cellRect.y + 5), 24, DARKBLUE);
+                    DrawText(num, (int)(cellRect.x + cellSize/4), (int)(cellRect.y + cellSize/4), cellSize/2, DARKBLUE);
                 }
             } else if (cell.state == CELL_FLAGGED) {
                 DrawRectangleRec(cellRect, cellColor);
-                DrawRectangleLines((int)cellRect.x, (int)cellRect.y, CELL_SIZE, CELL_SIZE, cellHiddenLine);
-                DrawText("F", (int)(cellRect.x + 8), (int)(cellRect.y + 5), 24, RED);
+                DrawRectangleLines((int)cellRect.x, (int)cellRect.y, cellSize, cellSize, cellHiddenLine);
+                DrawText("F", (int)(cellRect.x + cellSize/4), (int)(cellRect.y + cellSize/4), cellSize/2, RED);
             }
         }
     }
 
-    if (gameLost) {
-        DrawText("YOU LOST! (ENTER to menu)", 200, 45, 30, RED);
-    } else if (gameWon) {
-        DrawText("YOU WIN! (ENTER to menu)", 200, 45, 30, GREEN);
-    }
+    if (gameLost) DrawText("YOU LOST! (ENTER to menu)", GetScreenWidth()/2 - MeasureText("YOU LOST! (ENTER to menu)", 30)/2, 45, 30, RED);
+    else if (gameWon) DrawText("YOU WIN! (ENTER to menu)", GetScreenWidth()/2 - MeasureText("YOU WIN! (ENTER to menu)", 30)/2, 45, 30, GREEN);
 }
 
 void UpdateSettings(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         for (int i = 0; i < 4; i++) {
-            if (IsMouseOverButton(bgColorBtns[i])) {
-                bgColor = bgColorOptions[i];
-            }
+            if (IsMouseOverButton(bgColorBtns[i])) bgColor = bgColorOptions[i];
             if (IsMouseOverButton(cellColorBtns[i])) {
                 cellColor = cellColorOptions[i];
                 cellHiddenLine.r = (unsigned char)(cellColor.r * 0.6f);
@@ -396,20 +424,18 @@ void UpdateSettings(void) {
                 cellHiddenLine.a = 255;
             }
         }
-        if (IsMouseOverButton(backFromSettingsBtn)) {
-            currentScreen = SCREEN_MENU;
-        }
+        if (IsMouseOverButton(backFromSettingsBtn)) currentScreen = SCREEN_MENU;
     }
 }
 
 void DrawSettings(void) {
-    DrawText("SETTINGS", 300, 80, 40, WHITE);
-    DrawText("Background Color:", 200, 170, 20, LIGHTGRAY);
+    DrawText("SETTINGS", GetScreenWidth()/2 - MeasureText("SETTINGS", 40)/2, 80, 40, WHITE);
+    DrawText("Background Color:", GetScreenWidth()/2 - MeasureText("Background Color:", 20)/2, 170, 20, LIGHTGRAY);
     for (int i = 0; i < 4; i++) {
         DrawRectangleRec(bgColorBtns[i].bounds, bgColorBtns[i].color);
         DrawRectangleLinesEx(bgColorBtns[i].bounds, 2, WHITE);
     }
-    DrawText("Cell Color:", 200, 270, 20, LIGHTGRAY);
+    DrawText("Cell Color:", GetScreenWidth()/2 - MeasureText("Cell Color:", 20)/2, 270, 20, LIGHTGRAY);
     for (int i = 0; i < 4; i++) {
         DrawRectangleRec(cellColorBtns[i].bounds, cellColorBtns[i].color);
         DrawRectangleLinesEx(cellColorBtns[i].bounds, 2, WHITE);
@@ -419,36 +445,23 @@ void DrawSettings(void) {
 
 void UpdateStats(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-        if (IsMouseOverButton(backFromStatsBtn)) {
-            currentScreen = SCREEN_MENU;
-        }
+        if (IsMouseOverButton(backFromStatsBtn)) currentScreen = SCREEN_MENU;
     }
 }
 
 void DrawStats(void) {
-    DrawText("STATISTICS", 280, 60, 40, WHITE);
-
-    char playStr[32];
-    sprintf(playStr, "Games played: %d", gamesPlayed);
-    DrawText(playStr, 250, 160, 24, WHITE);
-
-    char winStr[32];
-    sprintf(winStr, "Wins: %d", gamesWon);
-    DrawText(winStr, 250, 210, 24, GREEN);
-
-    char loseStr[32];
-    sprintf(loseStr, "Losses: %d", gamesLost);
-    DrawText(loseStr, 250, 260, 24, RED);
-
+    DrawText("STATISTICS", GetScreenWidth()/2 - MeasureText("STATISTICS", 40)/2, 60, 40, WHITE);
+    char playStr[32]; sprintf(playStr, "Games played: %d", gamesPlayed);
+    DrawText(playStr, GetScreenWidth()/2 - MeasureText(playStr, 24)/2, 160, 24, WHITE);
+    char winStr[32]; sprintf(winStr, "Wins: %d", gamesWon);
+    DrawText(winStr, GetScreenWidth()/2 - MeasureText(winStr, 24)/2, 210, 24, GREEN);
+    char loseStr[32]; sprintf(loseStr, "Losses: %d", gamesLost);
+    DrawText(loseStr, GetScreenWidth()/2 - MeasureText(loseStr, 24)/2, 260, 24, RED);
     if (gamesPlayed > 0) {
         float winRate = (float)gamesWon / gamesPlayed * 100.0f;
-        char rateStr[32];
-        sprintf(rateStr, "Win rate: %.1f%%", winRate);
-        DrawText(rateStr, 250, 310, 24, YELLOW);
-    } else {
-        DrawText("Win rate: --", 250, 310, 24, LIGHTGRAY);
-    }
-
+        char rateStr[32]; sprintf(rateStr, "Win rate: %.1f%%", winRate);
+        DrawText(rateStr, GetScreenWidth()/2 - MeasureText(rateStr, 24)/2, 310, 24, YELLOW);
+    } else DrawText("Win rate: --", GetScreenWidth()/2 - MeasureText("Win rate: --", 24)/2, 310, 24, LIGHTGRAY);
     DrawButton(backFromStatsBtn);
 }
 
@@ -462,11 +475,17 @@ void DrawVictory(void) { DrawText("VICTORY! (press ENTER to menu)", 100, 100, 30
 int main(void)
 {
     InitWindow(800, 600, "Sweeper");
+    SetWindowMinSize(640, 480);
     InitMenuButtons();
     InitDifficultyButtons();
 
     while (!WindowShouldClose())
     {
+        if (IsWindowResized() && !fullscreen) {
+            RecalculateButtons();
+            if (currentScreen == SCREEN_GAMEPLAY) RecalculateGrid();
+        }
+
         UpdateCheatInput();
 
         switch (currentScreen) {
