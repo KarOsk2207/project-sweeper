@@ -145,70 +145,62 @@ void DrawJumpscare(void);
 void DrawSpam(void);
 void DrawAlign(void);
 
-// ---------- Dev-спавн ----------
+// нициализация Align (горизонтальное перемещение куба)
+void InitAlignLayout(void) {
+    Rectangle mainRect = { GetScreenWidth()/2 - 150, GetScreenHeight()/2 - 110, 300, 220 };
+    float subH = 50, pad = 10;
+    float zoneW = 20, zoneH = 40;   // вертикальная зона
+    float cubeSz = 20;
+
+    for (int i = 0; i < 3; i++) {
+        alignSubRects[i] = (Rectangle){ mainRect.x + pad, mainRect.y + 60 + i * (subH + 5), mainRect.width - 2 * pad, subH };
+        // елёная зона: вертикальная, справа
+        float zoneX = alignSubRects[i].x + alignSubRects[i].width - zoneW - 5;
+        float zoneY = alignSubRects[i].y + (subH - zoneH) / 2;  // по центру вертикали
+        alignZoneRects[i] = (Rectangle){ zoneX, zoneY, zoneW, zoneH };
+
+        // расный куб: старт слева, не пересекается с зоной
+        float cubeX = alignSubRects[i].x + 5;
+        // о вертикали случайно, но чтобы не вылезал
+        float cubeY = alignSubRects[i].y + rand() % (int)(subH - cubeSz);
+        alignCubeRects[i] = (Rectangle){ cubeX, cubeY, cubeSz, cubeSz };
+    }
+}
+
 void SpawnQTE(void) {
     if (qteActive || activeDynamicEnemies >= MAX_DYNAMIC_ENEMIES) return;
-    qteActive = true;
-    qteCurrentIndex = 0;
-    qteTimeLeft = 9.0;
+    qteActive = true; qteCurrentIndex = 0; qteTimeLeft = 9.0;
     for (int i = 0; i < 5; i++) qteSequence[i] = rand() % 4;
     qteWindowRect.x = rand() % (GetScreenWidth() - 200);
     qteWindowRect.y = rand() % (GetScreenHeight() - 100);
-    qteWindowRect.width = 200;
-    qteWindowRect.height = 80;
-    qteSpawnCooldown = false; // сброс кулдаунов, чтобы после завершения враг мог появиться естественно
-    qteCooldownTimer = 0.0;
-    qteSpawnTimer = 0.0;
+    qteWindowRect.width = 200; qteWindowRect.height = 80;
+    qteSpawnCooldown = false; qteCooldownTimer = 0.0; qteSpawnTimer = 0.0;
     activeDynamicEnemies++;
 }
 
 void SpawnJumpscare(void) {
     if (jumpscareActive || activeDynamicEnemies >= MAX_DYNAMIC_ENEMIES) return;
-    jumpscareActive = true;
-    jumpscarePhase = 0;
-    jumpscareTimer = 0.0;
-    jumpscareSpawnCooldown = false;
-    jumpscareCooldownTimer = 0.0;
-    jumpscareSpawnTimer = 0.0;
+    jumpscareActive = true; jumpscarePhase = 0; jumpscareTimer = 0.0;
+    jumpscareSpawnCooldown = false; jumpscareCooldownTimer = 0.0; jumpscareSpawnTimer = 0.0;
     activeDynamicEnemies++;
 }
 
 void SpawnSpam(void) {
     if (spamActive || activeDynamicEnemies >= MAX_DYNAMIC_ENEMIES) return;
-    spamActive = true;
-    spamCountdown = 5;
-    spamProgress = 0;
-    spamTickTimer = 0.0;
-    spamSpawnCooldown = false;
-    spamCooldownTimer = 0.0;
-    spamSpawnTimer = 0.0;
+    spamActive = true; spamCountdown = 5; spamProgress = 0; spamTickTimer = 0.0;
+    spamSpawnCooldown = false; spamCooldownTimer = 0.0; spamSpawnTimer = 0.0;
     activeDynamicEnemies++;
 }
 
 void SpawnAlign(void) {
     if (alignActive || activeDynamicEnemies >= MAX_DYNAMIC_ENEMIES) return;
-    alignActive = true;
-    alignCountdown = 8;
-    alignTimer = 0.0;
+    alignActive = true; alignCountdown = 8; alignTimer = 0.0;
     for (int i = 0; i < 3; i++) alignCubesDone[i] = false;
     alignDragging = -1;
-    Rectangle mainRect = { GetScreenWidth()/2 - 150, GetScreenHeight()/2 - 110, 300, 220 };
-    float subH = 50, pad = 10, zoneW = 60, zoneH = 20, cubeSz = 20;
-    for (int i = 0; i < 3; i++) {
-        alignSubRects[i] = (Rectangle){ mainRect.x+pad, mainRect.y+60+i*(subH+5), mainRect.width-2*pad, subH };
-        float zY = alignSubRects[i].y + rand()%(int)(subH-zoneH);
-        alignZoneRects[i] = (Rectangle){ alignSubRects[i].x+alignSubRects[i].width-zoneW-5, zY, zoneW, zoneH };
-        float cY;
-        do { cY = alignSubRects[i].y + rand()%(int)(subH-cubeSz); }
-        while (cY+cubeSz > alignZoneRects[i].y-2 && cY < alignZoneRects[i].y+zoneH+2);
-        alignCubeRects[i] = (Rectangle){ alignSubRects[i].x+5, cY, cubeSz, cubeSz };
-    }
-    alignSpawnCooldown = false;
-    alignCooldownTimer = 0.0;
-    alignSpawnTimer = 0.0;
+    InitAlignLayout();
+    alignSpawnCooldown = false; alignCooldownTimer = 0.0; alignSpawnTimer = 0.0;
     activeDynamicEnemies++;
 }
-// ---------------------------------
 
 void SaveData(void) {
     FILE *f = fopen("sweeper.dat", "w");
@@ -358,11 +350,7 @@ void UpdateQTE(void) {
     if (qteSpawnCooldown) { qteCooldownTimer-=dt; if (qteCooldownTimer<=0) { qteSpawnCooldown=false; qteSpawnTimer=0; } return; }
     if (!qteActive) {
         qteSpawnTimer += dt;
-        if (qteSpawnTimer >= 7.0) { qteSpawnTimer=0; if (activeDynamicEnemies<MAX_DYNAMIC_ENEMIES && (rand()%100)<20) {
-            qteActive=true; qteCurrentIndex=0; qteTimeLeft=9.0;
-            for(int i=0;i<5;i++) qteSequence[i]=rand()%4;
-            qteWindowRect.x=rand()%(GetScreenWidth()-200); qteWindowRect.y=rand()%(GetScreenHeight()-100);
-            qteWindowRect.width=200; qteWindowRect.height=80; activeDynamicEnemies++; } }
+        if (qteSpawnTimer >= 7.0) { qteSpawnTimer=0; if (activeDynamicEnemies<MAX_DYNAMIC_ENEMIES && (rand()%100)<20) { SpawnQTE(); } }
     } else {
         int k = GetKeyPressed();
         if (k==KEY_UP||k==KEY_DOWN||k==KEY_LEFT||k==KEY_RIGHT) {
@@ -383,8 +371,7 @@ void UpdateJumpscare(void) {
     if (jumpscareSpawnCooldown) { jumpscareCooldownTimer-=dt; if (jumpscareCooldownTimer<=0) { jumpscareSpawnCooldown=false; jumpscareSpawnTimer=0; } return; }
     if (!jumpscareActive) {
         jumpscareSpawnTimer+=dt;
-        if (jumpscareSpawnTimer>=7.0) { jumpscareSpawnTimer=0; if (activeDynamicEnemies<MAX_DYNAMIC_ENEMIES && (rand()%100)<20) {
-            jumpscareActive=true; jumpscarePhase=0; jumpscareTimer=0; activeDynamicEnemies++; } }
+        if (jumpscareSpawnTimer>=7.0) { jumpscareSpawnTimer=0; if (activeDynamicEnemies<MAX_DYNAMIC_ENEMIES && (rand()%100)<20) { SpawnJumpscare(); } }
     } else {
         jumpscareTimer+=dt;
         switch (jumpscarePhase) {
@@ -402,8 +389,7 @@ void UpdateSpam(void) {
     if (spamSpawnCooldown) { spamCooldownTimer-=dt; if (spamCooldownTimer<=0) { spamSpawnCooldown=false; spamSpawnTimer=0; } return; }
     if (!spamActive) {
         spamSpawnTimer+=dt;
-        if (spamSpawnTimer>=7.0) { spamSpawnTimer=0; if (activeDynamicEnemies<MAX_DYNAMIC_ENEMIES && (rand()%100)<20) {
-            spamActive=true; spamCountdown=5; spamProgress=0; spamTickTimer=0; activeDynamicEnemies++; } }
+        if (spamSpawnTimer>=7.0) { spamSpawnTimer=0; if (activeDynamicEnemies<MAX_DYNAMIC_ENEMIES && (rand()%100)<20) { SpawnSpam(); } }
     } else {
         if (IsKeyPressed(KEY_LEFT_ALT)||IsKeyPressed(KEY_RIGHT_ALT)) {
             spamProgress+=7; if (spamProgress>100) spamProgress=100;
@@ -414,6 +400,7 @@ void UpdateSpam(void) {
     }
 }
 
+// бновлённый UpdateAlign (горизонтальное перетаскивание)
 void UpdateAlign(void) {
     if (cheatActive) { if (alignActive) { activeDynamicEnemies--; } alignActive=false; alignSpawnCooldown=false; alignCooldownTimer=0; alignSpawnTimer=0; return; }
     if (gameLost || gameWon) return;
@@ -421,35 +408,43 @@ void UpdateAlign(void) {
     if (alignSpawnCooldown) { alignCooldownTimer-=dt; if (alignCooldownTimer<=0) { alignSpawnCooldown=false; alignSpawnTimer=0; } return; }
     if (!alignActive) {
         alignSpawnTimer+=dt;
-        if (alignSpawnTimer>=7.0) { alignSpawnTimer=0; if (activeDynamicEnemies<MAX_DYNAMIC_ENEMIES && (rand()%100)<20) {
-            alignActive=true; alignCountdown=8; alignTimer=0; for(int i=0;i<3;i++) alignCubesDone[i]=false; alignDragging=-1;
-            Rectangle mr = { GetScreenWidth()/2-150, GetScreenHeight()/2-110, 300, 220 };
-            float sh=50, pad=10, zw=60, zh=20, cs=20;
-            for(int i=0;i<3;i++) {
-                alignSubRects[i] = (Rectangle){ mr.x+pad, mr.y+60+i*(sh+5), mr.width-2*pad, sh };
-                float zy = alignSubRects[i].y + rand()%(int)(sh-zh);
-                alignZoneRects[i] = (Rectangle){ alignSubRects[i].x+alignSubRects[i].width-zw-5, zy, zw, zh };
-                float cy;
-                do { cy = alignSubRects[i].y + rand()%(int)(sh-cs); }
-                while (cy+cs > alignZoneRects[i].y-2 && cy < alignZoneRects[i].y+zh+2);
-                alignCubeRects[i] = (Rectangle){ alignSubRects[i].x+5, cy, cs, cs };
-            }
-            activeDynamicEnemies++; } }
+        if (alignSpawnTimer>=7.0) { alignSpawnTimer=0; if (activeDynamicEnemies<MAX_DYNAMIC_ENEMIES && (rand()%100)<20) { SpawnAlign(); } }
     } else {
         alignTimer+=dt;
         if (alignTimer>=1.0) { alignTimer-=1.0; alignCountdown--; if (alignCountdown<0) { if(!gameLost)gameLost=true; alignActive=false; activeDynamicEnemies--; return; } }
         Vector2 m = GetMousePosition();
         if (IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
-            if (alignDragging==-1) { for(int i=0;i<3;i++) if(!alignCubesDone[i]&&CheckCollisionPointRec(m,alignCubeRects[i])) { alignDragging=i; break; } }
-            if (alignDragging!=-1) {
-                Rectangle* cu = &alignCubeRects[alignDragging];
-                cu->y = m.y - cu->height/2;
-                if (cu->y < alignSubRects[alignDragging].y) cu->y = alignSubRects[alignDragging].y;
-                if (cu->y+cu->height > alignSubRects[alignDragging].y+alignSubRects[alignDragging].height) cu->y = alignSubRects[alignDragging].y+alignSubRects[alignDragging].height - cu->height;
-                if (CheckCollisionRecs(*cu, alignZoneRects[alignDragging])) { alignCubesDone[alignDragging]=true; alignDragging=-1; }
+            if (alignDragging==-1) {
+                for(int i=0;i<3;i++) {
+                    if (!alignCubesDone[i] && CheckCollisionPointRec(m, alignCubeRects[i])) {
+                        alignDragging = i;
+                        break;
+                    }
+                }
             }
-        } else alignDragging=-1;
-        if (alignCubesDone[0]&&alignCubesDone[1]&&alignCubesDone[2]) { alignActive=false; alignSpawnCooldown=true; alignCooldownTimer=10.0; activeDynamicEnemies--; }
+            if (alignDragging != -1) {
+                Rectangle* cu = &alignCubeRects[alignDragging];
+                // оризонтальное перемещение
+                cu->x = m.x - cu->width/2;
+                // граничение границами субокна по X
+                if (cu->x < alignSubRects[alignDragging].x) cu->x = alignSubRects[alignDragging].x;
+                if (cu->x + cu->width > alignSubRects[alignDragging].x + alignSubRects[alignDragging].width)
+                    cu->x = alignSubRects[alignDragging].x + alignSubRects[alignDragging].width - cu->width;
+                // роверка попадания в зелёную зону
+                if (CheckCollisionRecs(*cu, alignZoneRects[alignDragging])) {
+                    alignCubesDone[alignDragging] = true;
+                    alignDragging = -1;
+                }
+            }
+        } else {
+            alignDragging = -1;
+        }
+        if (alignCubesDone[0] && alignCubesDone[1] && alignCubesDone[2]) {
+            alignActive = false;
+            alignSpawnCooldown = true;
+            alignCooldownTimer = 10.0;
+            activeDynamicEnemies--;
+        }
     }
 }
 
@@ -537,7 +532,6 @@ void UpdateGameplay(void) {
         if (jumpscareActive && jumpscarePhase==2 && IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
             jumpscareActive=false; jumpscareSpawnCooldown=true; jumpscareCooldownTimer=10.0; activeDynamicEnemies--;
         }
-        // Dev-спавн
         if (devMode) {
             if (IsKeyPressed(KEY_F1)) SpawnQTE();
             else if (IsKeyPressed(KEY_F2)) SpawnJumpscare();
