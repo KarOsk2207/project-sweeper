@@ -145,7 +145,7 @@ void DrawJumpscare(void);
 void DrawSpam(void);
 void DrawAlign(void);
 
-// нициализация Align (горизонтальное перемещение куба)
+// Инициализация Align со случайными позициями зон и кубов
 void InitAlignLayout(void) {
     Rectangle mainRect = { GetScreenWidth()/2 - 150, GetScreenHeight()/2 - 110, 300, 220 };
     float subH = 50, pad = 10;
@@ -154,14 +154,29 @@ void InitAlignLayout(void) {
 
     for (int i = 0; i < 3; i++) {
         alignSubRects[i] = (Rectangle){ mainRect.x + pad, mainRect.y + 60 + i * (subH + 5), mainRect.width - 2 * pad, subH };
-        // елёная зона: вертикальная, справа
-        float zoneX = alignSubRects[i].x + alignSubRects[i].width - zoneW - 5;
-        float zoneY = alignSubRects[i].y + (subH - zoneH) / 2;  // по центру вертикали
+
+        // Случайная горизонтальная позиция зоны (с отступом от краёв, чтобы куб мог разместиться)
+        float zoneX = alignSubRects[i].x + rand() % (int)(alignSubRects[i].width - zoneW - cubeSz - 10) + 5;
+        // Вертикально центрируем
+        float zoneY = alignSubRects[i].y + (subH - zoneH) / 2;
         alignZoneRects[i] = (Rectangle){ zoneX, zoneY, zoneW, zoneH };
 
-        // расный куб: старт слева, не пересекается с зоной
-        float cubeX = alignSubRects[i].x + 5;
-        // о вертикали случайно, но чтобы не вылезал
+        // Куб случайно левее или правее зоны, с гарантией, что не пересекается
+        float cubeX;
+        bool leftSide = rand() % 2;   // 0 - слева, 1 - справа
+        if (leftSide) {
+            // Слева от зоны
+            cubeX = alignSubRects[i].x + rand() % (int)(zoneX - alignSubRects[i].x - cubeSz) + 2;
+        } else {
+            // Справа от зоны
+            float minX = zoneX + zoneW + 2;
+            float maxX = alignSubRects[i].x + alignSubRects[i].width - cubeSz - 2;
+            if (minX < maxX)
+                cubeX = minX + rand() % (int)(maxX - minX);
+            else
+                cubeX = minX;   // fallback
+        }
+        // Вертикально случайно в пределах высоты субокна
         float cubeY = alignSubRects[i].y + rand() % (int)(subH - cubeSz);
         alignCubeRects[i] = (Rectangle){ cubeX, cubeY, cubeSz, cubeSz };
     }
@@ -400,7 +415,6 @@ void UpdateSpam(void) {
     }
 }
 
-// бновлённый UpdateAlign (горизонтальное перетаскивание)
 void UpdateAlign(void) {
     if (cheatActive) { if (alignActive) { activeDynamicEnemies--; } alignActive=false; alignSpawnCooldown=false; alignCooldownTimer=0; alignSpawnTimer=0; return; }
     if (gameLost || gameWon) return;
@@ -424,13 +438,10 @@ void UpdateAlign(void) {
             }
             if (alignDragging != -1) {
                 Rectangle* cu = &alignCubeRects[alignDragging];
-                // оризонтальное перемещение
                 cu->x = m.x - cu->width/2;
-                // граничение границами субокна по X
                 if (cu->x < alignSubRects[alignDragging].x) cu->x = alignSubRects[alignDragging].x;
                 if (cu->x + cu->width > alignSubRects[alignDragging].x + alignSubRects[alignDragging].width)
                     cu->x = alignSubRects[alignDragging].x + alignSubRects[alignDragging].width - cu->width;
-                // роверка попадания в зелёную зону
                 if (CheckCollisionRecs(*cu, alignZoneRects[alignDragging])) {
                     alignCubesDone[alignDragging] = true;
                     alignDragging = -1;
