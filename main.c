@@ -10,7 +10,8 @@ typedef enum {
     SCREEN_GAMEPLAY,
     SCREEN_MINIGAME,
     SCREEN_GAME_OVER,
-    SCREEN_VICTORY
+    SCREEN_VICTORY,
+    SCREEN_SETTINGS   // новый экран
 } GameScreen;
 
 // ---------------------------------------------------------------------------
@@ -38,14 +39,14 @@ Board gameBoard;
 bool gameLost = false;
 bool gameWon  = false;
 
-// Счётчик флагов и таймер
-int flagCount = 0;          // количество установленных флагов
-int timer = 0;              // прошедшее время в секундах
-double startTime = 0.0;    // время начала игры (в секундах от GetTime())
+int flagCount = 0;
+int timer = 0;
+double startTime = 0.0;
 bool timerStarted = false;
 
 // Кнопки меню
 Button newGameBtn;
+Button settingsBtn;   // новая кнопка
 Button exitBtn;
 
 // Кнопки сложности
@@ -57,14 +58,17 @@ Button backBtn;
 // Кнопка-смайлик (рестарт)
 Rectangle smileyRect;
 
+// Кнопки экрана настроек
+Button backFromSettingsBtn;
+
 // ---------------------------------------------------------------------------
 // Константы отрисовки
 #define CELL_SIZE  30
 #define GRID_X     50
-#define GRID_Y     80   // сдвинули вниз, чтобы освободить место под таймер
+#define GRID_Y     80
 
 // ---------------------------------------------------------------------------
-// Сброс игры (остаёмся на той же сложности)
+// Сброс игры
 void ResetGame(void) {
     BoardInit(&gameBoard, gameConfig.rows, gameConfig.cols, gameConfig.mines);
     gameLost = false;
@@ -81,12 +85,17 @@ void InitMenuButtons(void) {
     float btnWidth = 200, btnHeight = 50;
     float centerX = (800 - btnWidth) / 2.0f;
 
-    newGameBtn.bounds = (Rectangle){ centerX, 250, btnWidth, btnHeight };
+    newGameBtn.bounds = (Rectangle){ centerX, 200, btnWidth, btnHeight };
     newGameBtn.text = "New Game";
     newGameBtn.color = DARKGREEN;
     newGameBtn.hoverColor = GREEN;
 
-    exitBtn.bounds = (Rectangle){ centerX, 330, btnWidth, btnHeight };
+    settingsBtn.bounds = (Rectangle){ centerX, 270, btnWidth, btnHeight };
+    settingsBtn.text = "Settings";
+    settingsBtn.color = DARKBLUE;
+    settingsBtn.hoverColor = BLUE;
+
+    exitBtn.bounds = (Rectangle){ centerX, 340, btnWidth, btnHeight };
     exitBtn.text = "Exit";
     exitBtn.color = DARKGRAY;
     exitBtn.hoverColor = GRAY;
@@ -115,6 +124,12 @@ void InitDifficultyButtons(void) {
     backBtn.text = "Back";
     backBtn.color = DARKGRAY;
     backBtn.hoverColor = GRAY;
+
+    // Кнопка Back на экране настроек
+    backFromSettingsBtn.bounds = (Rectangle){ centerX, 420, btnWidth, btnHeight };
+    backFromSettingsBtn.text = "Back";
+    backFromSettingsBtn.color = DARKGRAY;
+    backFromSettingsBtn.hoverColor = GRAY;
 }
 
 // ---------------------------------------------------------------------------
@@ -141,6 +156,9 @@ void UpdateMenu(void) {
         if (IsMouseOverButton(newGameBtn)) {
             currentScreen = SCREEN_DIFFICULTY;
         }
+        if (IsMouseOverButton(settingsBtn)) {
+            currentScreen = SCREEN_SETTINGS;
+        }
         if (IsMouseOverButton(exitBtn)) {
             CloseWindow();
         }
@@ -150,6 +168,7 @@ void UpdateMenu(void) {
 void DrawMenu(void) {
     DrawText("SWEEPER", 300, 100, 50, WHITE);
     DrawButton(newGameBtn);
+    DrawButton(settingsBtn);
     DrawButton(exitBtn);
 }
 
@@ -196,7 +215,6 @@ void UpdateGameplay(void) {
 
     if (IsKeyPressed(KEY_ESCAPE)) currentScreen = SCREEN_MENU;
 
-    // Рестарт по клику на смайлик
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         Vector2 mouse = GetMousePosition();
         if (CheckCollisionPointRec(mouse, smileyRect)) {
@@ -205,7 +223,6 @@ void UpdateGameplay(void) {
         }
     }
 
-    // Клики по клеткам
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
         Vector2 mouse = GetMousePosition();
         int col = (int)((mouse.x - GRID_X) / CELL_SIZE);
@@ -213,7 +230,6 @@ void UpdateGameplay(void) {
 
         if (row >= 0 && row < gameBoard.rows && col >= 0 && col < gameBoard.cols) {
             if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-                // Первый клик запускает таймер и размещает мины
                 if (!gameBoard.firstClickDone) {
                     BoardPlaceMines(&gameBoard, row, col);
                     BoardCalculateNumbers(&gameBoard);
@@ -227,9 +243,7 @@ void UpdateGameplay(void) {
                     gameWon = BoardCheckVictory(&gameBoard);
                 }
             } else if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
-                // Флаг: если уже запущен таймер
-                if (!gameBoard.firstClickDone) return; // нельзя ставить флаг до первого клика? На самом деле можно, но мин ещё нет. Разрешим для удобства.
-                // Переключение флага и обновление счётчика
+                if (!gameBoard.firstClickDone) return;
                 Cell* cell = &gameBoard.cells[row][col];
                 if (cell->state == CELL_HIDDEN) {
                     cell->state = CELL_FLAGGED;
@@ -242,37 +256,32 @@ void UpdateGameplay(void) {
         }
     }
 
-    // Обновление таймера
     if (timerStarted && !gameLost && !gameWon) {
         double elapsed = GetTime() - startTime;
         timer = (int)elapsed;
-        // Ограничим 999 секундами, чтобы не ломать отображение
         if (timer > 999) timer = 999;
     }
 }
 
 void DrawGameplay(void) {
-    // --- Верхняя панель ---
-    // Счётчик мин
+    // Верхняя панель
     int minesLeft = gameConfig.mines - flagCount;
     if (minesLeft < 0) minesLeft = 0;
     char mineStr[16];
     sprintf(mineStr, "Mines: %d", minesLeft);
     DrawText(mineStr, 20, 10, 24, WHITE);
 
-    // Таймер
     char timeStr[16];
     sprintf(timeStr, "Time: %d", timer);
     DrawText(timeStr, 150, 10, 24, WHITE);
 
-    // Смайлик (кнопка рестарта)
     smileyRect = (Rectangle){ 350, 5, 40, 40 };
     Color smileyColor = gameLost ? RED : gameWon ? GREEN : YELLOW;
     DrawRectangleRec(smileyRect, smileyColor);
     DrawRectangleLinesEx(smileyRect, 2, WHITE);
     DrawText(":)", (int)(smileyRect.x + 8), (int)(smileyRect.y + 6), 24, BLACK);
 
-    // --- Игровое поле ---
+    // Сетка
     for (int r = 0; r < gameBoard.rows; r++) {
         for (int c = 0; c < gameBoard.cols; c++) {
             Rectangle cellRect = {
@@ -304,12 +313,27 @@ void DrawGameplay(void) {
         }
     }
 
-    // Сообщения о победе/поражении
     if (gameLost) {
         DrawText("YOU LOST! (ENTER to menu)", 200, 45, 30, RED);
     } else if (gameWon) {
         DrawText("YOU WIN! (ENTER to menu)", 200, 45, 30, GREEN);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Экран настроек (пока заглушка)
+void UpdateSettings(void) {
+    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        if (IsMouseOverButton(backFromSettingsBtn)) {
+            currentScreen = SCREEN_MENU;
+        }
+    }
+}
+
+void DrawSettings(void) {
+    DrawText("SETTINGS", 300, 100, 40, WHITE);
+    DrawText("Customization options coming soon...", 180, 200, 20, LIGHTGRAY);
+    DrawButton(backFromSettingsBtn);
 }
 
 // ---------------------------------------------------------------------------
@@ -349,7 +373,6 @@ int main(void)
 
     while (!WindowShouldClose())
     {
-        // Обновление текущего экрана
         switch (currentScreen) {
             case SCREEN_MENU:       UpdateMenu();       break;
             case SCREEN_DIFFICULTY: UpdateDifficulty(); break;
@@ -357,9 +380,9 @@ int main(void)
             case SCREEN_MINIGAME:   UpdateMinigame();   break;
             case SCREEN_GAME_OVER:  UpdateGameOver();   break;
             case SCREEN_VICTORY:    UpdateVictory();    break;
+            case SCREEN_SETTINGS:   UpdateSettings();   break;
         }
 
-        // Отрисовка
         BeginDrawing();
         ClearBackground(DARKGRAY);
 
@@ -370,6 +393,7 @@ int main(void)
             case SCREEN_MINIGAME:   DrawMinigame();   break;
             case SCREEN_GAME_OVER:  DrawGameOver();   break;
             case SCREEN_VICTORY:    DrawVictory();    break;
+            case SCREEN_SETTINGS:   DrawSettings();   break;
         }
 
         EndDrawing();
