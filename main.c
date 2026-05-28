@@ -10,7 +10,7 @@ typedef enum {
     SCREEN_GAME_OVER,
     SCREEN_VICTORY,
     SCREEN_SETTINGS,
-    SCREEN_STATS     // новый экран
+    SCREEN_STATS
 } GameScreen;
 
 typedef struct {
@@ -26,7 +26,6 @@ typedef struct {
     int mines;
 } GameConfig;
 
-// Глобальные переменные
 GameScreen currentScreen = SCREEN_MENU;
 GameConfig gameConfig;
 Board gameBoard;
@@ -38,35 +37,29 @@ int timer = 0;
 double startTime = 0.0;
 bool timerStarted = false;
 
-// Кастомизация
 Color bgColor = DARKGRAY;
 Color cellColor = LIGHTGRAY;
 Color cellHiddenLine = GRAY;
 
-// Статистика
 int gamesPlayed = 0;
 int gamesWon = 0;
 int gamesLost = 0;
-bool gameEndCounted = false;  // чтобы не учитывать исход повторно
+bool gameEndCounted = false;
 
-// Кнопки меню
 Button newGameBtn;
 Button settingsBtn;
-Button statsBtn;   // новая
+Button statsBtn;
 Button exitBtn;
 
-// Кнопки сложности
 Button easyBtn;
 Button mediumBtn;
 Button hardBtn;
 Button backBtn;
 
-// Кнопки настроек
 Button backFromSettingsBtn;
 Button bgColorBtns[4];
 Button cellColorBtns[4];
 
-// Кнопка Back для Stats
 Button backFromStatsBtn;
 
 Rectangle smileyRect;
@@ -89,7 +82,6 @@ Color cellColorOptions[4] = {
 #define GRID_X     50
 #define GRID_Y     80
 
-// ---------------------------------------------------------------------------
 void ResetGame(void) {
     BoardInit(&gameBoard, gameConfig.rows, gameConfig.cols, gameConfig.mines);
     gameLost = false;
@@ -98,11 +90,10 @@ void ResetGame(void) {
     timer = 0;
     timerStarted = false;
     startTime = 0.0;
-    gameEndCounted = false;    // сбрасываем флаг учёта
-    gamesPlayed++;             // начали новую игру
+    gameEndCounted = false;
+    gamesPlayed++;
 }
 
-// ---------------------------------------------------------------------------
 void InitMenuButtons(void) {
     float btnWidth = 200, btnHeight = 50;
     float centerX = (800 - btnWidth) / 2.0f;
@@ -152,13 +143,12 @@ void InitDifficultyButtons(void) {
     backBtn.color = DARKGRAY;
     backBtn.hoverColor = GRAY;
 
-    // Кнопка Back для Settings и Stats (общая)
     backFromSettingsBtn.bounds = (Rectangle){ centerX, 480, btnWidth, btnHeight };
     backFromSettingsBtn.text = "Back";
     backFromSettingsBtn.color = DARKGRAY;
     backFromSettingsBtn.hoverColor = GRAY;
 
-    backFromStatsBtn = backFromSettingsBtn;  // используем ту же кнопку
+    backFromStatsBtn = backFromSettingsBtn;
 
     float smallBtnW = 100, smallBtnH = 40;
     float startX = 200;
@@ -177,7 +167,6 @@ void InitDifficultyButtons(void) {
     }
 }
 
-// ---------------------------------------------------------------------------
 bool IsMouseOverButton(Button btn) {
     return CheckCollisionPointRec(GetMousePosition(), btn.bounds);
 }
@@ -193,7 +182,6 @@ void DrawButton(Button btn) {
     DrawText(btn.text, (int)textX, (int)textY, 20, WHITE);
 }
 
-// ---------------------------------------------------------------------------
 void UpdateMenu(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         if (IsMouseOverButton(newGameBtn)) {
@@ -219,7 +207,6 @@ void DrawMenu(void) {
     DrawButton(exitBtn);
 }
 
-// ---------------------------------------------------------------------------
 void UpdateDifficulty(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         if (IsMouseOverButton(easyBtn)) {
@@ -251,7 +238,6 @@ void DrawDifficulty(void) {
     DrawButton(backBtn);
 }
 
-// ---------------------------------------------------------------------------
 void UpdateGameplay(void) {
     if (gameLost || gameWon) {
         if (!gameEndCounted) {
@@ -368,7 +354,6 @@ void DrawGameplay(void) {
     }
 }
 
-// ---------------------------------------------------------------------------
 void UpdateSettings(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         for (int i = 0; i < 4; i++) {
@@ -405,7 +390,7 @@ void DrawSettings(void) {
 }
 
 // ---------------------------------------------------------------------------
-// Экран статистики (пока заглушка)
+// Обновлённый экран статистики
 void UpdateStats(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         if (IsMouseOverButton(backFromStatsBtn)) {
@@ -415,8 +400,30 @@ void UpdateStats(void) {
 }
 
 void DrawStats(void) {
-    DrawText("STATISTICS", 280, 80, 40, WHITE);
-    DrawText("Coming soon...", 300, 200, 20, LIGHTGRAY);
+    DrawText("STATISTICS", 280, 60, 40, WHITE);
+
+    char playStr[32];
+    sprintf(playStr, "Games played: %d", gamesPlayed);
+    DrawText(playStr, 250, 160, 24, WHITE);
+
+    char winStr[32];
+    sprintf(winStr, "Wins: %d", gamesWon);
+    DrawText(winStr, 250, 210, 24, GREEN);
+
+    char loseStr[32];
+    sprintf(loseStr, "Losses: %d", gamesLost);
+    DrawText(loseStr, 250, 260, 24, RED);
+
+    // Процент побед (если были игры)
+    if (gamesPlayed > 0) {
+        float winRate = (float)gamesWon / gamesPlayed * 100.0f;
+        char rateStr[32];
+        sprintf(rateStr, "Win rate: %.1f%%", winRate);
+        DrawText(rateStr, 250, 310, 24, YELLOW);
+    } else {
+        DrawText("Win rate: --", 250, 310, 24, LIGHTGRAY);
+    }
+
     DrawButton(backFromStatsBtn);
 }
 
@@ -428,7 +435,6 @@ void DrawGameOver(void) { DrawText("GAME OVER (press ENTER to menu)", 100, 100, 
 void UpdateVictory(void) { if (IsKeyPressed(KEY_ENTER)) currentScreen = SCREEN_MENU; }
 void DrawVictory(void) { DrawText("VICTORY! (press ENTER to menu)", 100, 100, 30, GREEN); }
 
-// ---------------------------------------------------------------------------
 int main(void)
 {
     InitWindow(800, 600, "Sweeper");
