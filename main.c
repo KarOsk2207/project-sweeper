@@ -5,7 +5,6 @@
 #include <stdlib.h>
 #include <time.h>
 
-
 typedef enum {
     SCREEN_MENU,
     SCREEN_DIFFICULTY,
@@ -59,17 +58,20 @@ int cellSize = 30;
 int gridX = 50;
 int gridY = 80;
 
+// енератор
 float generatorCharge = 50.0f;
 const float GENERATOR_CHARGE_RATE = 25.0f;
 const float GENERATOR_DISCHARGE_RATE = 3.0f;
 bool generatorWarning = false;
 
+// Фазовый враг
 int phaseEnemyPhase = 1;
 double phaseEnemyTimer = 0.0;
 const double PHASE_TRANSITION_TIME = 15.0;
 Rectangle phaseEnemyResetBtn;
 bool phaseEnemyResetQueued = false;
 
+// QTE враг
 bool qteActive = false;
 int qteSequence[5] = { 0 };
 int qteCurrentIndex = 0;
@@ -78,6 +80,16 @@ double qteCooldownTimer = 0.0;
 double qteSpawnTimer = 0.0;
 Rectangle qteWindowRect;
 bool qteSpawnCooldown = false;
+
+// Jumpscare враг
+bool jumpscareActive = false;
+int jumpscarePhase = 0;            // 0: prepare, 1: approach, 2: red
+double jumpscareTimer = 0.0;       // таймер фазы
+double jumpscareCooldownTimer = 0.0;
+double jumpscareSpawnTimer = 0.0;
+bool jumpscareSpawnCooldown = false;
+// араметры куба (будут использованы позже)
+Rectangle jumpscareCubeRect = { 0, 0, 0, 0 };
 
 Button newGameBtn;
 Button settingsBtn;
@@ -167,6 +179,10 @@ void ResetGame(void) {
     qteSpawnCooldown = false;
     qteCooldownTimer = 0.0;
     qteSpawnTimer = 0.0;
+    jumpscareActive = false;
+    jumpscareSpawnCooldown = false;
+    jumpscareCooldownTimer = 0.0;
+    jumpscareSpawnTimer = 0.0;
     RecalculateGrid();
 }
 
@@ -293,6 +309,7 @@ void UpdateCheatInput(void) {
             inputBuffer[0] = '\0';
             if (cheatActive) {
                 qteActive = false;
+                jumpscareActive = false;
             }
         }
     }
@@ -417,6 +434,80 @@ void UpdateQTE(void) {
     }
 }
 
+// ======================= Jumpscare =======================
+void UpdateJumpscare(void) {
+    if (cheatActive) {
+        jumpscareActive = false;
+        jumpscareSpawnCooldown = false;
+        jumpscareCooldownTimer = 0.0;
+        jumpscareSpawnTimer = 0.0;
+        return;
+    }
+    if (gameLost || gameWon) return;
+
+    float dt = GetFrameTime();
+
+    if (jumpscareSpawnCooldown) {
+        jumpscareCooldownTimer -= dt;
+        if (jumpscareCooldownTimer <= 0.0) {
+            jumpscareSpawnCooldown = false;
+            jumpscareSpawnTimer = 0.0;
+        }
+        return;
+    }
+
+    if (!jumpscareActive) {
+        jumpscareSpawnTimer += dt;
+        if (jumpscareSpawnTimer >= 7.0) {
+            jumpscareSpawnTimer = 0.0;
+            if ((rand() % 100) < 20) {
+                // Спавн
+                jumpscareActive = true;
+                jumpscarePhase = 0;          // prepare
+                jumpscareTimer = 0.0;
+            }
+        }
+    } else {
+        jumpscareTimer += dt;
+        switch (jumpscarePhase) {
+            case 0: // Prepare
+                if (jumpscareTimer >= 1.0) {
+                    jumpscarePhase = 1;      // approach
+                    jumpscareTimer = 0.0;
+                }
+                break;
+            case 1: // Approach
+                if (jumpscareTimer >= 2.0) {
+                    jumpscarePhase = 2;      // red
+                    jumpscareTimer = 0.0;
+                }
+                break;
+            case 2: // Red
+                if (jumpscareTimer >= 2.0) {
+                    // е успел отбить – проигрыш
+                    if (!gameLost) gameLost = true;
+                    jumpscareActive = false;
+                }
+                break;
+        }
+    }
+}
+
+void DrawJumpscare(void) {
+    if (!jumpscareActive) return;
+
+    if (jumpscarePhase == 0) {
+        DrawText("PREPARE", GetScreenWidth()/2 - MeasureText("PREPARE", 40)/2, GetScreenHeight() - 50, 40, WHITE);
+    } else if (jumpscarePhase == 1) {
+        // аглушка: текст
+        DrawText("APPROACH...", GetScreenWidth()/2 - MeasureText("APPROACH...", 40)/2, GetScreenHeight()/2 - 20, 40, YELLOW);
+    } else if (jumpscarePhase == 2) {
+        DrawText("PRESS RIGHT MOUSE BUTTON!", GetScreenWidth()/2 - MeasureText("PRESS RIGHT MOUSE BUTTON!", 30)/2, GetScreenHeight()/2, 30, RED);
+    }
+}
+
+// --------------------------------------------------------
+
 void UpdateMenu(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         if (IsMouseOverButton(newGameBtn)) currentScreen = SCREEN_DIFFICULTY;
@@ -488,6 +579,16 @@ void UpdateGameplay(void) {
             }
         }
         UpdateQTE();
+        UpdateJumpscare();
+
+        // роверка отбивания jumpscare (правый клик)
+        if (jumpscareActive && jumpscarePhase == 2 && IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
+            // Успешно отбили
+            jumpscareActive = false;
+            jumpscareSpawnCooldown = true;
+            jumpscareCooldownTimer = 10.0;
+            return; // е обрабатываем другие клики в этом кадре
+        }
     }
 
     if (gameLost || gameWon) {
@@ -596,7 +697,7 @@ void DrawGameplay(void) {
         }
     }
 
-    // Генератор
+    // енератор
     Rectangle genPanel = { 10, GetScreenHeight() - 70, 150, 60 };
     DrawRectangleRec(genPanel, Fade(BLACK, 0.7f));
     DrawRectangleLinesEx(genPanel, 2, WHITE);
@@ -641,23 +742,20 @@ void DrawGameplay(void) {
     DrawRectangleLinesEx(phaseEnemyResetBtn, 1, WHITE);
     DrawText("<<", (int)(phaseEnemyResetBtn.x + 12), (int)(phaseEnemyResetBtn.y + 5), 18, WHITE);
 
-    // QTE враг (улучшенная отрисовка)
+    // QTE враг
     if (qteActive) {
         DrawRectangleRec(qteWindowRect, Fade(BLACK, 0.85f));
         DrawRectangleLinesEx(qteWindowRect, 2, RED);
 
-        // Горизонтальная линия разделяет окно пополам
         float midY = qteWindowRect.y + qteWindowRect.height / 2;
         DrawLine((int)qteWindowRect.x, (int)midY, (int)(qteWindowRect.x + qteWindowRect.width), (int)midY, RED);
 
-        // Верхняя часть: прогресс
         char progressText[16];
         sprintf(progressText, "%d/5", qteCurrentIndex);
         int progressFontSize = 24;
         DrawText(progressText, (int)(qteWindowRect.x + qteWindowRect.width/2 - MeasureText(progressText, progressFontSize)/2),
                  (int)(qteWindowRect.y + 5), progressFontSize, YELLOW);
 
-        // Нижняя часть: требуемая клавиша
         const char* directionStr[] = { "Press Up", "Press Down", "Press Left", "Press Right" };
         int expectedIdx = qteCurrentIndex < 5 ? qteSequence[qteCurrentIndex] : 0;
         int dirFontSize = 16;
@@ -665,12 +763,14 @@ void DrawGameplay(void) {
                  (int)(qteWindowRect.x + qteWindowRect.width/2 - MeasureText(directionStr[expectedIdx], dirFontSize)/2),
                  (int)(midY + 10), dirFontSize, WHITE);
 
-        // Индикатор оставшегося времени (тонкая полоска внизу)
         float timeFraction = (float)(qteTimeLeft / 9.0);
         int barY = (int)(qteWindowRect.y + qteWindowRect.height - 6);
         DrawRectangle((int)qteWindowRect.x + 2, barY, (int)qteWindowRect.width - 4, 4, DARKGRAY);
         DrawRectangle((int)qteWindowRect.x + 2, barY, (int)((qteWindowRect.width - 4) * timeFraction), 4, RED);
     }
+
+    // Jumpscare
+    DrawJumpscare();
 
     if (gameLost) DrawText("YOU LOST! (ENTER to menu)", GetScreenWidth()/2 - MeasureText("YOU LOST! (ENTER to menu)", 30)/2, 45, 30, RED);
     else if (gameWon) DrawText("YOU WIN! (ENTER to menu)", GetScreenWidth()/2 - MeasureText("YOU WIN! (ENTER to menu)", 30)/2, 45, 30, GREEN);
@@ -763,7 +863,7 @@ int main(void)
             case SCREEN_STATS:      UpdateStats();      break;
         }
 
-	UpdateCheatInput();
+        UpdateCheatInput();
 
         BeginDrawing();
         ClearBackground(DARKGRAY);
