@@ -86,7 +86,14 @@ double jumpscareSpawnTimer = 0.0;
 bool jumpscareSpawnCooldown = false;
 Rectangle jumpscareCubeRect = { 0, 0, 0, 0 };
 
-// Счётчик активных динамических врагов
+bool spamActive = false;
+int spamCountdown = 5;
+int spamProgress = 0;
+double spamTickTimer = 0.0;
+double spamCooldownTimer = 0.0;
+double spamSpawnTimer = 0.0;
+bool spamSpawnCooldown = false;
+
 int activeDynamicEnemies = 0;
 #define MAX_DYNAMIC_ENEMIES 3
 
@@ -182,6 +189,10 @@ void ResetGame(void) {
     jumpscareSpawnCooldown = false;
     jumpscareCooldownTimer = 0.0;
     jumpscareSpawnTimer = 0.0;
+    spamActive = false;
+    spamSpawnCooldown = false;
+    spamCooldownTimer = 0.0;
+    spamSpawnTimer = 0.0;
     activeDynamicEnemies = 0;
     RecalculateGrid();
 }
@@ -310,6 +321,7 @@ void UpdateCheatInput(void) {
             if (cheatActive) {
                 if (qteActive) { qteActive = false; activeDynamicEnemies--; }
                 if (jumpscareActive) { jumpscareActive = false; activeDynamicEnemies--; }
+                if (spamActive) { spamActive = false; activeDynamicEnemies--; }
             }
         }
     }
@@ -497,31 +509,99 @@ void UpdateJumpscare(void) {
     }
 }
 
-void DrawJumpscare(void) {
-    if (!jumpscareActive) return;
+void UpdateSpam(void) {
+    if (cheatActive) {
+        if (spamActive) { activeDynamicEnemies--; }
+        spamActive = false;
+        spamSpawnCooldown = false;
+        spamCooldownTimer = 0.0;
+        spamSpawnTimer = 0.0;
+        return;
+    }
+    if (gameLost || gameWon) return;
 
-    int w = GetScreenWidth();
-    int h = GetScreenHeight();
+    float dt = GetFrameTime();
 
-    if (jumpscarePhase == 0) {
-        DrawText("PREPARE", w/2 - MeasureText("PREPARE", 40)/2, h - 50, 40, WHITE);
+    if (spamSpawnCooldown) {
+        spamCooldownTimer -= dt;
+        if (spamCooldownTimer <= 0.0) {
+            spamSpawnCooldown = false;
+            spamSpawnTimer = 0.0;
+        }
+        return;
+    }
+
+    if (!spamActive) {
+        spamSpawnTimer += dt;
+        if (spamSpawnTimer >= 7.0) {
+            spamSpawnTimer = 0.0;
+            if (activeDynamicEnemies < MAX_DYNAMIC_ENEMIES && (rand() % 100) < 20) {
+                spamActive = true;
+                spamCountdown = 5;
+                spamProgress = 0;
+                spamTickTimer = 0.0;
+                activeDynamicEnemies++;
+            }
+        }
     } else {
-        float size = 0.0f;
-        if (jumpscarePhase == 1) {
-            float t = (float)(jumpscareTimer / 2.0);
-            if (t > 1.0f) t = 1.0f;
-            size = t * (w * 0.7f);
-        } else {
-            float t = (float)(jumpscareTimer / 2.0);
-            if (t > 1.0f) t = 1.0f;
-            size = w * 0.7f + t * (w * 0.2f);
+        if (IsKeyPressed(KEY_LEFT_ALT) || IsKeyPressed(KEY_RIGHT_ALT)) {
+            spamProgress += 7;
+            if (spamProgress > 100) spamProgress = 100;
+            if (spamProgress >= 100) {
+                spamActive = false;
+                spamSpawnCooldown = true;
+                spamCooldownTimer = 10.0;
+                activeDynamicEnemies--;
+                return;
+            }
         }
 
-        float x = w/2 - size/2;
-        float y = h/2 - size/2;
-        Color cubeColor = (jumpscarePhase == 1) ? YELLOW : RED;
-        DrawRectangle((int)x, (int)y, (int)size, (int)size, cubeColor);
+        spamTickTimer += dt;
+        if (spamTickTimer >= 1.0) {
+            spamTickTimer -= 1.0;
+            spamCountdown--;
+            if (spamCountdown < 0) {
+                if (!gameLost) gameLost = true;
+                spamActive = false;
+                activeDynamicEnemies--;
+            }
+        }
     }
+}
+
+void DrawSpam(void) {
+    if (!spamActive) return;
+
+    // кно в центре экрана
+    Rectangle spamRect = {
+        (float)(GetScreenWidth()/2 - 150),
+        (float)(GetScreenHeight()/2 - 60),
+        300, 120
+    };
+    DrawRectangleRec(spamRect, Fade(BLACK, 0.85f));
+    DrawRectangleLinesEx(spamRect, 2, RED);
+
+    // аголовок
+    DrawText("SPAM ALT!", (int)(spamRect.x + spamRect.width/2 - MeasureText("SPAM ALT!", 24)/2),
+             (int)(spamRect.y + 5), 24, WHITE);
+
+    // братный отсчет
+    char countStr[8];
+    sprintf(countStr, "%d", spamCountdown);
+    int countSize = 40;
+    DrawText(countStr,
+             (int)(spamRect.x + spamRect.width/2 - MeasureText(countStr, countSize)/2),
+             (int)(spamRect.y + 35),
+             countSize, (spamCountdown <= 2) ? RED : YELLOW);
+
+    // Шкала прогресса
+    int barX = (int)spamRect.x + 15;
+    int barY = (int)spamRect.y + 85;
+    int barWidth = (int)spamRect.width - 30;
+    int barHeight = 10;
+    DrawRectangle(barX, barY, barWidth, barHeight, DARKGRAY);
+    DrawRectangle(barX, barY, (int)(barWidth * (spamProgress / 100.0f)), barHeight, GREEN);
+    DrawRectangleLines(barX, barY, barWidth, barHeight, WHITE);
 }
 
 void UpdateMenu(void) {
@@ -596,13 +676,13 @@ void UpdateGameplay(void) {
         }
         UpdateQTE();
         UpdateJumpscare();
+        UpdateSpam();
 
         if (jumpscareActive && jumpscarePhase == 2 && IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
             jumpscareActive = false;
             jumpscareSpawnCooldown = true;
             jumpscareCooldownTimer = 10.0;
             activeDynamicEnemies--;
-            return;
         }
     }
 
@@ -785,7 +865,31 @@ void DrawGameplay(void) {
     }
 
     // Jumpscare
-    DrawJumpscare();
+    if (jumpscareActive) {
+        int w = GetScreenWidth();
+        int h = GetScreenHeight();
+        if (jumpscarePhase == 0) {
+            DrawText("PREPARE", w/2 - MeasureText("PREPARE", 40)/2, h - 50, 40, WHITE);
+        } else {
+            float size = 0.0f;
+            if (jumpscarePhase == 1) {
+                float t = (float)(jumpscareTimer / 2.0);
+                if (t > 1.0f) t = 1.0f;
+                size = t * (w * 0.7f);
+            } else {
+                float t = (float)(jumpscareTimer / 2.0);
+                if (t > 1.0f) t = 1.0f;
+                size = w * 0.7f + t * (w * 0.2f);
+            }
+            float x = w/2 - size/2;
+            float y = h/2 - size/2;
+            Color cubeColor = (jumpscarePhase == 1) ? YELLOW : RED;
+            DrawRectangle((int)x, (int)y, (int)size, (int)size, cubeColor);
+        }
+    }
+
+    // Spam
+    DrawSpam();
 
     if (gameLost) DrawText("YOU LOST! (ENTER to menu)", GetScreenWidth()/2 - MeasureText("YOU LOST! (ENTER to menu)", 30)/2, 45, 30, RED);
     else if (gameWon) DrawText("YOU WIN! (ENTER to menu)", GetScreenWidth()/2 - MeasureText("YOU WIN! (ENTER to menu)", 30)/2, 45, 30, GREEN);
