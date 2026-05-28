@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <time.h>
 
+
 typedef enum {
     SCREEN_MENU,
     SCREEN_DIFFICULTY,
@@ -58,28 +59,25 @@ int cellSize = 30;
 int gridX = 50;
 int gridY = 80;
 
-// енератор
 float generatorCharge = 50.0f;
 const float GENERATOR_CHARGE_RATE = 25.0f;
 const float GENERATOR_DISCHARGE_RATE = 3.0f;
 bool generatorWarning = false;
 
-// Фазовый враг
 int phaseEnemyPhase = 1;
 double phaseEnemyTimer = 0.0;
 const double PHASE_TRANSITION_TIME = 15.0;
 Rectangle phaseEnemyResetBtn;
 bool phaseEnemyResetQueued = false;
 
-// QTE враг
 bool qteActive = false;
-int qteSequence[5] = { 0 };        // 0 - Up, 1 - Down, 2 - Left, 3 - Right
-int qteCurrentIndex = 0;           // сколько уже введено (0..5)
-double qteTimeLeft = 0.0;          // таймер обратного отсчёта (9 сек)
-double qteCooldownTimer = 0.0;     // сколько осталось до возможности нового появления
-double qteSpawnTimer = 0.0;        // таймер до следующей проверки спавна
-Rectangle qteWindowRect;           // положение окна (будет использовано позже)
-bool qteSpawnCooldown = false;     // true, если кулдаун после исчезновения
+int qteSequence[5] = { 0 };
+int qteCurrentIndex = 0;
+double qteTimeLeft = 0.0;
+double qteCooldownTimer = 0.0;
+double qteSpawnTimer = 0.0;
+Rectangle qteWindowRect;
+bool qteSpawnCooldown = false;
 
 Button newGameBtn;
 Button settingsBtn;
@@ -165,7 +163,6 @@ void ResetGame(void) {
     generatorCharge = 50.0f;
     phaseEnemyPhase = 1;
     phaseEnemyTimer = 0.0;
-    // Сброс QTE
     qteActive = false;
     qteSpawnCooldown = false;
     qteCooldownTimer = 0.0;
@@ -295,7 +292,7 @@ void UpdateCheatInput(void) {
             cheatActive = !cheatActive;
             inputBuffer[0] = '\0';
             if (cheatActive) {
-                qteActive = false;  // мгновенно убираем активный QTE
+                qteActive = false;
             }
         }
     }
@@ -366,32 +363,26 @@ void UpdateQTE(void) {
 
     float dt = GetFrameTime();
 
-    // бработка кулдауна
     if (qteSpawnCooldown) {
         qteCooldownTimer -= dt;
         if (qteCooldownTimer <= 0.0) {
             qteSpawnCooldown = false;
-            qteSpawnTimer = 0.0; // готов к новому циклу
+            qteSpawnTimer = 0.0;
         }
         return;
     }
 
-    // сли не активен, пробуем заспавнить
     if (!qteActive) {
         qteSpawnTimer += dt;
         if (qteSpawnTimer >= 7.0) {
             qteSpawnTimer = 0.0;
-            // 20% шанс
             if ((rand() % 100) < 20) {
-                // Спавн!
                 qteActive = true;
                 qteCurrentIndex = 0;
                 qteTimeLeft = 9.0;
-                // енерируем случайную последовательность из 5 стрелок
                 for (int i = 0; i < 5; i++) {
-                    qteSequence[i] = rand() % 4;  // 0-3
+                    qteSequence[i] = rand() % 4;
                 }
-                // Случайное положение окна (позже сделаем красиво)
                 qteWindowRect.x = (float)(rand() % (GetScreenWidth() - 200));
                 qteWindowRect.y = (float)(rand() % (GetScreenHeight() - 100));
                 qteWindowRect.width = 200;
@@ -399,7 +390,6 @@ void UpdateQTE(void) {
             }
         }
     } else {
-        // QTE активен, обрабатываем ввод
         int key = GetKeyPressed();
         if (key == KEY_UP || key == KEY_DOWN || key == KEY_LEFT || key == KEY_RIGHT) {
             int expected = qteSequence[qteCurrentIndex];
@@ -412,19 +402,15 @@ void UpdateQTE(void) {
             if (correct) {
                 qteCurrentIndex++;
                 if (qteCurrentIndex >= 5) {
-                    // Успех
                     qteActive = false;
                     qteSpawnCooldown = true;
                     qteCooldownTimer = 10.0;
                 }
             }
-            // еправильный ввод игнорируется
         }
 
-        // Таймер
         qteTimeLeft -= dt;
         if (qteTimeLeft <= 0.0) {
-            // ремя вышло – проигрыш
             if (!gameLost) gameLost = true;
             qteActive = false;
         }
@@ -610,7 +596,7 @@ void DrawGameplay(void) {
         }
     }
 
-    // енератор
+    // Генератор
     Rectangle genPanel = { 10, GetScreenHeight() - 70, 150, 60 };
     DrawRectangleRec(genPanel, Fade(BLACK, 0.7f));
     DrawRectangleLinesEx(genPanel, 2, WHITE);
@@ -655,11 +641,35 @@ void DrawGameplay(void) {
     DrawRectangleLinesEx(phaseEnemyResetBtn, 1, WHITE);
     DrawText("<<", (int)(phaseEnemyResetBtn.x + 12), (int)(phaseEnemyResetBtn.y + 5), 18, WHITE);
 
-    // QTE (заглушка)
+    // QTE враг (улучшенная отрисовка)
     if (qteActive) {
-        DrawRectangleRec(qteWindowRect, Fade(BLACK, 0.8f));
+        DrawRectangleRec(qteWindowRect, Fade(BLACK, 0.85f));
         DrawRectangleLinesEx(qteWindowRect, 2, RED);
-        DrawText("QTE", (int)(qteWindowRect.x + 20), (int)(qteWindowRect.y + 20), 20, WHITE);
+
+        // Горизонтальная линия разделяет окно пополам
+        float midY = qteWindowRect.y + qteWindowRect.height / 2;
+        DrawLine((int)qteWindowRect.x, (int)midY, (int)(qteWindowRect.x + qteWindowRect.width), (int)midY, RED);
+
+        // Верхняя часть: прогресс
+        char progressText[16];
+        sprintf(progressText, "%d/5", qteCurrentIndex);
+        int progressFontSize = 24;
+        DrawText(progressText, (int)(qteWindowRect.x + qteWindowRect.width/2 - MeasureText(progressText, progressFontSize)/2),
+                 (int)(qteWindowRect.y + 5), progressFontSize, YELLOW);
+
+        // Нижняя часть: требуемая клавиша
+        const char* directionStr[] = { "Press Up", "Press Down", "Press Left", "Press Right" };
+        int expectedIdx = qteCurrentIndex < 5 ? qteSequence[qteCurrentIndex] : 0;
+        int dirFontSize = 16;
+        DrawText(directionStr[expectedIdx],
+                 (int)(qteWindowRect.x + qteWindowRect.width/2 - MeasureText(directionStr[expectedIdx], dirFontSize)/2),
+                 (int)(midY + 10), dirFontSize, WHITE);
+
+        // Индикатор оставшегося времени (тонкая полоска внизу)
+        float timeFraction = (float)(qteTimeLeft / 9.0);
+        int barY = (int)(qteWindowRect.y + qteWindowRect.height - 6);
+        DrawRectangle((int)qteWindowRect.x + 2, barY, (int)qteWindowRect.width - 4, 4, DARKGRAY);
+        DrawRectangle((int)qteWindowRect.x + 2, barY, (int)((qteWindowRect.width - 4) * timeFraction), 4, RED);
     }
 
     if (gameLost) DrawText("YOU LOST! (ENTER to menu)", GetScreenWidth()/2 - MeasureText("YOU LOST! (ENTER to menu)", 30)/2, 45, 30, RED);
@@ -741,7 +751,6 @@ int main(void)
             RecalculateButtons();
             if (currentScreen == SCREEN_GAMEPLAY) RecalculateGrid();
         }
-        UpdateCheatInput();
 
         switch (currentScreen) {
             case SCREEN_MENU:       UpdateMenu();       break;
@@ -753,6 +762,8 @@ int main(void)
             case SCREEN_SETTINGS:   UpdateSettings();   break;
             case SCREEN_STATS:      UpdateStats();      break;
         }
+
+	UpdateCheatInput();
 
         BeginDrawing();
         ClearBackground(DARKGRAY);
