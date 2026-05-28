@@ -37,3 +37,6 @@
 
 ## Тесты
 `mingw32-make test`
+
+## Скачать игру
+Готовые сборки доступны в [разделе Releases](https://github.com/KarOsk2207/project-sweeper/releases).
