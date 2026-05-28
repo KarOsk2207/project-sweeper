@@ -1,6 +1,7 @@
 ﻿#include "raylib.h"
 #include "board.h"
 #include <stdio.h>
+#include <string.h>   // для strcmp
 
 typedef enum {
     SCREEN_MENU,
@@ -46,6 +47,10 @@ int gamesWon = 0;
 int gamesLost = 0;
 bool gameEndCounted = false;
 
+// ит-мод
+bool cheatActive = false;
+char inputBuffer[6] = "";  // храним последние 5 символов + завершающий '\0'
+
 Button newGameBtn;
 Button settingsBtn;
 Button statsBtn;
@@ -59,7 +64,6 @@ Button backBtn;
 Button backFromSettingsBtn;
 Button bgColorBtns[4];
 Button cellColorBtns[4];
-
 Button backFromStatsBtn;
 
 Rectangle smileyRect;
@@ -182,6 +186,25 @@ void DrawButton(Button btn) {
     DrawText(btn.text, (int)textX, (int)textY, 20, WHITE);
 }
 
+// бновление буфера ввода для чит-кода
+void UpdateCheatInput(void) {
+    int key = GetKeyPressed();
+
+    if (key >= 65 && key <= 90) {      // буквы A-Z
+        char c = (char)key;
+        // Сдвиг буфера влево на 1 символ
+        memmove(inputBuffer, inputBuffer + 1, 4);
+        inputBuffer[4] = c;
+        inputBuffer[5] = '\0';
+
+        if (strcmp(inputBuffer, "IDDQD") == 0) {
+            cheatActive = !cheatActive;   // переключить
+            inputBuffer[0] = '\0';        // сбросить буфер
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 void UpdateMenu(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         if (IsMouseOverButton(newGameBtn)) {
@@ -352,6 +375,11 @@ void DrawGameplay(void) {
     } else if (gameWon) {
         DrawText("YOU WIN! (ENTER to menu)", 200, 45, 30, GREEN);
     }
+
+    // аглушка чека
+    if (cheatActive) {
+        DrawText("CHEAT ACTIVE", 600, 10, 20, RED);
+    }
 }
 
 void UpdateSettings(void) {
@@ -389,8 +417,6 @@ void DrawSettings(void) {
     DrawButton(backFromSettingsBtn);
 }
 
-// ---------------------------------------------------------------------------
-// Обновлённый экран статистики
 void UpdateStats(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         if (IsMouseOverButton(backFromStatsBtn)) {
@@ -414,7 +440,6 @@ void DrawStats(void) {
     sprintf(loseStr, "Losses: %d", gamesLost);
     DrawText(loseStr, 250, 260, 24, RED);
 
-    // Процент побед (если были игры)
     if (gamesPlayed > 0) {
         float winRate = (float)gamesWon / gamesPlayed * 100.0f;
         char rateStr[32];
@@ -427,7 +452,6 @@ void DrawStats(void) {
     DrawButton(backFromStatsBtn);
 }
 
-// ---------------------------------------------------------------------------
 void UpdateMinigame(void) { if (IsKeyPressed(KEY_ESCAPE)) currentScreen = SCREEN_GAMEPLAY; }
 void DrawMinigame(void) { DrawText("MINIGAME", 100, 100, 30, WHITE); }
 void UpdateGameOver(void) { if (IsKeyPressed(KEY_ENTER)) currentScreen = SCREEN_MENU; }
@@ -443,6 +467,8 @@ int main(void)
 
     while (!WindowShouldClose())
     {
+        UpdateCheatInput();   // обработка чит-кода
+
         switch (currentScreen) {
             case SCREEN_MENU:       UpdateMenu();       break;
             case SCREEN_DIFFICULTY: UpdateDifficulty(); break;
