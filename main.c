@@ -86,7 +86,6 @@ double jumpscareSpawnTimer = 0.0;
 bool jumpscareSpawnCooldown = false;
 Rectangle jumpscareCubeRect = { 0, 0, 0, 0 };
 
-// Spam враг
 bool spamActive = false;
 int spamCountdown = 5;
 int spamProgress = 0;
@@ -128,10 +127,6 @@ Color cellColorOptions[4] = {
     { 180, 200, 255, 255 },
     { 180, 255, 180, 255 }
 };
-
-// Прототипы функций отрисовки врагов, чтобы избежать ошибок компиляции
-void DrawJumpscare(void);
-void DrawSpam(void);
 
 void SaveData(void) {
     FILE *f = fopen("sweeper.dat", "w");
@@ -574,42 +569,39 @@ void UpdateSpam(void) {
     }
 }
 
-// Заглушка отрисовки Spam (будет улучшена во втором коммите)
 void DrawSpam(void) {
     if (!spamActive) return;
 
-    DrawText("SPAM ALT!", GetScreenWidth()/2 - MeasureText("SPAM ALT!", 30)/2, GetScreenHeight()/2 - 60, 30, WHITE);
+    // кно в центре экрана
+    Rectangle spamRect = {
+        (float)(GetScreenWidth()/2 - 150),
+        (float)(GetScreenHeight()/2 - 60),
+        300, 120
+    };
+    DrawRectangleRec(spamRect, Fade(BLACK, 0.85f));
+    DrawRectangleLinesEx(spamRect, 2, RED);
+
+    // аголовок
+    DrawText("SPAM ALT!", (int)(spamRect.x + spamRect.width/2 - MeasureText("SPAM ALT!", 24)/2),
+             (int)(spamRect.y + 5), 24, WHITE);
+
+    // братный отсчет
     char countStr[8];
     sprintf(countStr, "%d", spamCountdown);
-    DrawText(countStr, GetScreenWidth()/2 - MeasureText(countStr, 40)/2, GetScreenHeight()/2, 40, RED);
-}
+    int countSize = 40;
+    DrawText(countStr,
+             (int)(spamRect.x + spamRect.width/2 - MeasureText(countStr, countSize)/2),
+             (int)(spamRect.y + 35),
+             countSize, (spamCountdown <= 2) ? RED : YELLOW);
 
-// Заглушка отрисовки Jumpscare (она уже есть, но продублируем прототип)
-void DrawJumpscare(void) {
-    if (!jumpscareActive) return;
-
-    int w = GetScreenWidth();
-    int h = GetScreenHeight();
-
-    if (jumpscarePhase == 0) {
-        DrawText("PREPARE", w/2 - MeasureText("PREPARE", 40)/2, h - 50, 40, WHITE);
-    } else {
-        float size = 0.0f;
-        if (jumpscarePhase == 1) {
-            float t = (float)(jumpscareTimer / 2.0);
-            if (t > 1.0f) t = 1.0f;
-            size = t * (w * 0.7f);
-        } else {
-            float t = (float)(jumpscareTimer / 2.0);
-            if (t > 1.0f) t = 1.0f;
-            size = w * 0.7f + t * (w * 0.2f);
-        }
-
-        float x = w/2 - size/2;
-        float y = h/2 - size/2;
-        Color cubeColor = (jumpscarePhase == 1) ? YELLOW : RED;
-        DrawRectangle((int)x, (int)y, (int)size, (int)size, cubeColor);
-    }
+    // Шкала прогресса
+    int barX = (int)spamRect.x + 15;
+    int barY = (int)spamRect.y + 85;
+    int barWidth = (int)spamRect.width - 30;
+    int barHeight = 10;
+    DrawRectangle(barX, barY, barWidth, barHeight, DARKGRAY);
+    DrawRectangle(barX, barY, (int)(barWidth * (spamProgress / 100.0f)), barHeight, GREEN);
+    DrawRectangleLines(barX, barY, barWidth, barHeight, WHITE);
 }
 
 void UpdateMenu(void) {
@@ -800,7 +792,7 @@ void DrawGameplay(void) {
         }
     }
 
-    // Генератор
+    // енератор
     Rectangle genPanel = { 10, GetScreenHeight() - 70, 150, 60 };
     DrawRectangleRec(genPanel, Fade(BLACK, 0.7f));
     DrawRectangleLinesEx(genPanel, 2, WHITE);
@@ -872,8 +864,32 @@ void DrawGameplay(void) {
         DrawRectangle((int)qteWindowRect.x + 2, barY, (int)((qteWindowRect.width - 4) * timeFraction), 4, RED);
     }
 
-    DrawJumpscare();  // Теперь компилятор знает о ней из прототипа
-    DrawSpam();       // Аналогично
+    // Jumpscare
+    if (jumpscareActive) {
+        int w = GetScreenWidth();
+        int h = GetScreenHeight();
+        if (jumpscarePhase == 0) {
+            DrawText("PREPARE", w/2 - MeasureText("PREPARE", 40)/2, h - 50, 40, WHITE);
+        } else {
+            float size = 0.0f;
+            if (jumpscarePhase == 1) {
+                float t = (float)(jumpscareTimer / 2.0);
+                if (t > 1.0f) t = 1.0f;
+                size = t * (w * 0.7f);
+            } else {
+                float t = (float)(jumpscareTimer / 2.0);
+                if (t > 1.0f) t = 1.0f;
+                size = w * 0.7f + t * (w * 0.2f);
+            }
+            float x = w/2 - size/2;
+            float y = h/2 - size/2;
+            Color cubeColor = (jumpscarePhase == 1) ? YELLOW : RED;
+            DrawRectangle((int)x, (int)y, (int)size, (int)size, cubeColor);
+        }
+    }
+
+    // Spam
+    DrawSpam();
 
     if (gameLost) DrawText("YOU LOST! (ENTER to menu)", GetScreenWidth()/2 - MeasureText("YOU LOST! (ENTER to menu)", 30)/2, 45, 30, RED);
     else if (gameWon) DrawText("YOU WIN! (ENTER to menu)", GetScreenWidth()/2 - MeasureText("YOU WIN! (ENTER to menu)", 30)/2, 45, 30, GREEN);
