@@ -3,6 +3,7 @@
 *.exe
 *.o
 *.out
+sweeper.dat
 
 # Build folders
 build/

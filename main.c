@@ -2,6 +2,7 @@
 #include "board.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 typedef enum {
     SCREEN_MENU,
@@ -86,6 +87,38 @@ Color cellColorOptions[4] = {
     { 180, 200, 255, 255 },
     { 180, 255, 180, 255 }
 };
+
+// ========== Функции сохранения/загрузки ==========
+void SaveData(void) {
+    const char *dir = GetApplicationDirectory();
+    char filepath[256];
+    snprintf(filepath, sizeof(filepath), "%ssweeper.dat", dir);
+    
+    FILE *f = fopen(filepath, "w");
+    if (f) {
+        fprintf(f, "%d %d %d %d\n", bgColor.r, bgColor.g, bgColor.b, bgColor.a);
+        fprintf(f, "%d %d %d %d\n", cellColor.r, cellColor.g, cellColor.b, cellColor.a);
+        fprintf(f, "%d %d %d %d\n", cellHiddenLine.r, cellHiddenLine.g, cellHiddenLine.b, cellHiddenLine.a);
+        fprintf(f, "%d %d %d\n", gamesPlayed, gamesWon, gamesLost);
+        fclose(f);
+    }
+}
+
+void LoadData(void) {
+    const char *dir = GetApplicationDirectory();
+    char filepath[256];
+    snprintf(filepath, sizeof(filepath), "%ssweeper.dat", dir);
+    
+    FILE *f = fopen(filepath, "r");
+    if (f) {
+        fscanf(f, "%hhu %hhu %hhu %hhu", &bgColor.r, &bgColor.g, &bgColor.b, &bgColor.a);
+        fscanf(f, "%hhu %hhu %hhu %hhu", &cellColor.r, &cellColor.g, &cellColor.b, &cellColor.a);
+        fscanf(f, "%hhu %hhu %hhu %hhu", &cellHiddenLine.r, &cellHiddenLine.g, &cellHiddenLine.b, &cellHiddenLine.a);
+        fscanf(f, "%d %d %d", &gamesPlayed, &gamesWon, &gamesLost);
+        fclose(f);
+    }
+}
+// ===============================================
 
 void RecalculateGrid(void) {
     int w = GetScreenWidth();
@@ -479,6 +512,8 @@ int main(void)
     InitMenuButtons();
     InitDifficultyButtons();
 
+    LoadData();   // загружаем настройки и статистику
+
     while (!WindowShouldClose())
     {
         if (IsWindowResized() && !fullscreen) {
@@ -516,6 +551,7 @@ int main(void)
         EndDrawing();
     }
 
+    SaveData();   // сохраняем перед выходом
     CloseWindow();
     return 0;
 }
