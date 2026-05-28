@@ -1,6 +1,6 @@
 ﻿#include "raylib.h"
 #include "board.h"
-#include <stdio.h>   // для sprintf, если понадобится
+#include <stdio.h>
 
 // ---------------------------------------------------------------------------
 // Перечисление экранов
@@ -38,6 +38,12 @@ Board gameBoard;
 bool gameLost = false;
 bool gameWon  = false;
 
+// Счётчик флагов и таймер
+int flagCount = 0;          // количество установленных флагов
+int timer = 0;              // прошедшее время в секундах
+double startTime = 0.0;    // время начала игры (в секундах от GetTime())
+bool timerStarted = false;
+
 // Кнопки меню
 Button newGameBtn;
 Button exitBtn;
@@ -48,11 +54,26 @@ Button mediumBtn;
 Button hardBtn;
 Button backBtn;
 
+// Кнопка-смайлик (рестарт)
+Rectangle smileyRect;
+
 // ---------------------------------------------------------------------------
 // Константы отрисовки
 #define CELL_SIZE  30
 #define GRID_X     50
-#define GRID_Y     50
+#define GRID_Y     80   // сдвинули вниз, чтобы освободить место под таймер
+
+// ---------------------------------------------------------------------------
+// Сброс игры (остаёмся на той же сложности)
+void ResetGame(void) {
+    BoardInit(&gameBoard, gameConfig.rows, gameConfig.cols, gameConfig.mines);
+    gameLost = false;
+    gameWon = false;
+    flagCount = 0;
+    timer = 0;
+    timerStarted = false;
+    startTime = 0.0;
+}
 
 // ---------------------------------------------------------------------------
 // Инициализация кнопок меню
@@ -138,23 +159,17 @@ void UpdateDifficulty(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         if (IsMouseOverButton(easyBtn)) {
             gameConfig.rows = 9; gameConfig.cols = 9; gameConfig.mines = 10;
-            BoardInit(&gameBoard, gameConfig.rows, gameConfig.cols, gameConfig.mines);
-            gameLost = false;
-            gameWon = false;
+            ResetGame();
             currentScreen = SCREEN_GAMEPLAY;
         }
         if (IsMouseOverButton(mediumBtn)) {
             gameConfig.rows = 16; gameConfig.cols = 16; gameConfig.mines = 40;
-            BoardInit(&gameBoard, gameConfig.rows, gameConfig.cols, gameConfig.mines);
-            gameLost = false;
-            gameWon = false;
+            ResetGame();
             currentScreen = SCREEN_GAMEPLAY;
         }
         if (IsMouseOverButton(hardBtn)) {
             gameConfig.rows = 16; gameConfig.cols = 30; gameConfig.mines = 99;
-            BoardInit(&gameBoard, gameConfig.rows, gameConfig.cols, gameConfig.mines);
-            gameLost = false;
-            gameWon = false;
+            ResetGame();
             currentScreen = SCREEN_GAMEPLAY;
         }
         if (IsMouseOverButton(backBtn)) {
@@ -175,28 +190,35 @@ void DrawDifficulty(void) {
 // Игровой процесс (Сапёр)
 void UpdateGameplay(void) {
     if (gameLost || gameWon) {
-        // После завершения игры нажатие Enter возвращает в меню
         if (IsKeyPressed(KEY_ENTER)) currentScreen = SCREEN_MENU;
         return;
     }
 
-    // Выход по Escape
     if (IsKeyPressed(KEY_ESCAPE)) currentScreen = SCREEN_MENU;
 
-    // Обработка кликов мыши
+    // Рестарт по клику на смайлик
+    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        Vector2 mouse = GetMousePosition();
+        if (CheckCollisionPointRec(mouse, smileyRect)) {
+            ResetGame();
+            return;
+        }
+    }
+
+    // Клики по клеткам
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
         Vector2 mouse = GetMousePosition();
-        // Переводим координаты мыши в индексы клетки
         int col = (int)((mouse.x - GRID_X) / CELL_SIZE);
         int row = (int)((mouse.y - GRID_Y) / CELL_SIZE);
 
         if (row >= 0 && row < gameBoard.rows && col >= 0 && col < gameBoard.cols) {
             if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-                // Левый клик: открываем клетку
+                // Первый клик запускает таймер и размещает мины
                 if (!gameBoard.firstClickDone) {
-                    // Первый клик: расставляем мины (безопасно)
                     BoardPlaceMines(&gameBoard, row, col);
                     BoardCalculateNumbers(&gameBoard);
+                    timerStarted = true;
+                    startTime = GetTime();
                 }
                 bool hitMine = BoardReveal(&gameBoard, row, col);
                 if (hitMine) {
@@ -205,15 +227,52 @@ void UpdateGameplay(void) {
                     gameWon = BoardCheckVictory(&gameBoard);
                 }
             } else if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
-                // Правый клик: флаг
-                BoardToggleFlag(&gameBoard, row, col);
+                // Флаг: если уже запущен таймер
+                if (!gameBoard.firstClickDone) return; // нельзя ставить флаг до первого клика? На самом деле можно, но мин ещё нет. Разрешим для удобства.
+                // Переключение флага и обновление счётчика
+                Cell* cell = &gameBoard.cells[row][col];
+                if (cell->state == CELL_HIDDEN) {
+                    cell->state = CELL_FLAGGED;
+                    flagCount++;
+                } else if (cell->state == CELL_FLAGGED) {
+                    cell->state = CELL_HIDDEN;
+                    flagCount--;
+                }
             }
         }
+    }
+
+    // Обновление таймера
+    if (timerStarted && !gameLost && !gameWon) {
+        double elapsed = GetTime() - startTime;
+        timer = (int)elapsed;
+        // Ограничим 999 секундами, чтобы не ломать отображение
+        if (timer > 999) timer = 999;
     }
 }
 
 void DrawGameplay(void) {
-    // Рисуем сетку
+    // --- Верхняя панель ---
+    // Счётчик мин
+    int minesLeft = gameConfig.mines - flagCount;
+    if (minesLeft < 0) minesLeft = 0;
+    char mineStr[16];
+    sprintf(mineStr, "Mines: %d", minesLeft);
+    DrawText(mineStr, 20, 10, 24, WHITE);
+
+    // Таймер
+    char timeStr[16];
+    sprintf(timeStr, "Time: %d", timer);
+    DrawText(timeStr, 150, 10, 24, WHITE);
+
+    // Смайлик (кнопка рестарта)
+    smileyRect = (Rectangle){ 350, 5, 40, 40 };
+    Color smileyColor = gameLost ? RED : gameWon ? GREEN : YELLOW;
+    DrawRectangleRec(smileyRect, smileyColor);
+    DrawRectangleLinesEx(smileyRect, 2, WHITE);
+    DrawText(":)", (int)(smileyRect.x + 8), (int)(smileyRect.y + 6), 24, BLACK);
+
+    // --- Игровое поле ---
     for (int r = 0; r < gameBoard.rows; r++) {
         for (int c = 0; c < gameBoard.cols; c++) {
             Rectangle cellRect = {
@@ -226,11 +285,10 @@ void DrawGameplay(void) {
 
             if (cell.state == CELL_HIDDEN) {
                 DrawRectangleRec(cellRect, LIGHTGRAY);
-                DrawRectangleLines( (int)cellRect.x, (int)cellRect.y, CELL_SIZE, CELL_SIZE, GRAY);
+                DrawRectangleLines((int)cellRect.x, (int)cellRect.y, CELL_SIZE, CELL_SIZE, GRAY);
             } else if (cell.state == CELL_REVEALED) {
                 DrawRectangleRec(cellRect, WHITE);
-                DrawRectangleLines( (int)cellRect.x, (int)cellRect.y, CELL_SIZE, CELL_SIZE, GRAY);
-
+                DrawRectangleLines((int)cellRect.x, (int)cellRect.y, CELL_SIZE, CELL_SIZE, GRAY);
                 if (cell.hasMine) {
                     DrawText("*", (int)(cellRect.x + 8), (int)(cellRect.y + 5), 24, RED);
                 } else if (cell.adjacentMines > 0) {
@@ -240,7 +298,7 @@ void DrawGameplay(void) {
                 }
             } else if (cell.state == CELL_FLAGGED) {
                 DrawRectangleRec(cellRect, LIGHTGRAY);
-                DrawRectangleLines( (int)cellRect.x, (int)cellRect.y, CELL_SIZE, CELL_SIZE, GRAY);
+                DrawRectangleLines((int)cellRect.x, (int)cellRect.y, CELL_SIZE, CELL_SIZE, GRAY);
                 DrawText("F", (int)(cellRect.x + 8), (int)(cellRect.y + 5), 24, RED);
             }
         }
@@ -248,9 +306,9 @@ void DrawGameplay(void) {
 
     // Сообщения о победе/поражении
     if (gameLost) {
-        DrawText("YOU LOST! (ENTER to menu)", 200, 20, 30, RED);
+        DrawText("YOU LOST! (ENTER to menu)", 200, 45, 30, RED);
     } else if (gameWon) {
-        DrawText("YOU WIN! (ENTER to menu)", 200, 20, 30, GREEN);
+        DrawText("YOU WIN! (ENTER to menu)", 200, 45, 30, GREEN);
     }
 }
 
