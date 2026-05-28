@@ -1,7 +1,7 @@
 ﻿#include "raylib.h"
 #include "board.h"
 #include <stdio.h>
-#include <string.h>   // для strcmp
+#include <string.h>
 
 typedef enum {
     SCREEN_MENU,
@@ -47,9 +47,8 @@ int gamesWon = 0;
 int gamesLost = 0;
 bool gameEndCounted = false;
 
-// ит-мод
 bool cheatActive = false;
-char inputBuffer[6] = "";  // храним последние 5 символов + завершающий '\0'
+char inputBuffer[6] = "";
 
 Button newGameBtn;
 Button settingsBtn;
@@ -186,20 +185,17 @@ void DrawButton(Button btn) {
     DrawText(btn.text, (int)textX, (int)textY, 20, WHITE);
 }
 
-// бновление буфера ввода для чит-кода
 void UpdateCheatInput(void) {
     int key = GetKeyPressed();
-
-    if (key >= 65 && key <= 90) {      // буквы A-Z
+    if (key >= 65 && key <= 90) {
         char c = (char)key;
-        // Сдвиг буфера влево на 1 символ
         memmove(inputBuffer, inputBuffer + 1, 4);
         inputBuffer[4] = c;
         inputBuffer[5] = '\0';
 
         if (strcmp(inputBuffer, "IDDQD") == 0) {
-            cheatActive = !cheatActive;   // переключить
-            inputBuffer[0] = '\0';        // сбросить буфер
+            cheatActive = !cheatActive;
+            inputBuffer[0] = '\0';
         }
     }
 }
@@ -352,6 +348,15 @@ void DrawGameplay(void) {
             if (cell.state == CELL_HIDDEN) {
                 DrawRectangleRec(cellRect, cellColor);
                 DrawRectangleLines((int)cellRect.x, (int)cellRect.y, CELL_SIZE, CELL_SIZE, cellHiddenLine);
+
+                // ит-индикаторы на скрытых клетках
+                if (cheatActive) {
+                    if (cell.hasMine) {
+                        DrawCircle((int)(cellRect.x + CELL_SIZE/2), (int)(cellRect.y + CELL_SIZE/2), 5, RED);
+                    } else {
+                        DrawCircle((int)(cellRect.x + CELL_SIZE/2), (int)(cellRect.y + CELL_SIZE/2), 5, GREEN);
+                    }
+                }
             } else if (cell.state == CELL_REVEALED) {
                 DrawRectangleRec(cellRect, WHITE);
                 DrawRectangleLines((int)cellRect.x, (int)cellRect.y, CELL_SIZE, CELL_SIZE, GRAY);
@@ -374,11 +379,6 @@ void DrawGameplay(void) {
         DrawText("YOU LOST! (ENTER to menu)", 200, 45, 30, RED);
     } else if (gameWon) {
         DrawText("YOU WIN! (ENTER to menu)", 200, 45, 30, GREEN);
-    }
-
-    // аглушка чека
-    if (cheatActive) {
-        DrawText("CHEAT ACTIVE", 600, 10, 20, RED);
     }
 }
 
@@ -467,7 +467,7 @@ int main(void)
 
     while (!WindowShouldClose())
     {
-        UpdateCheatInput();   // обработка чит-кода
+        UpdateCheatInput();
 
         switch (currentScreen) {
             case SCREEN_MENU:       UpdateMenu();       break;
