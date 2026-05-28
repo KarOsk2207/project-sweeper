@@ -61,7 +61,14 @@ int gridY = 80;
 float generatorCharge = 50.0f;
 const float GENERATOR_CHARGE_RATE = 25.0f;
 const float GENERATOR_DISCHARGE_RATE = 3.0f;
-bool generatorWarning = false;   // мигание при >= 90%
+bool generatorWarning = false;
+
+// Фазовый враг
+int phaseEnemyPhase = 1;            // 1..5
+double phaseEnemyTimer = 0.0;       // таймер до перехода на следующую фазу
+const double PHASE_TRANSITION_TIME = 15.0;  // секунд на каждую фазу (медленно)
+Rectangle phaseEnemyResetBtn;       // кнопка сброса
+bool phaseEnemyResetQueued = false; // нажали кнопку в этом кадре
 
 Button newGameBtn;
 Button settingsBtn;
@@ -145,6 +152,8 @@ void ResetGame(void) {
     gameEndCounted = false;
     gamesPlayed++;
     generatorCharge = 50.0f;
+    phaseEnemyPhase = 1;
+    phaseEnemyTimer = 0.0;
     RecalculateGrid();
 }
 
@@ -218,6 +227,9 @@ void InitDifficultyButtons(void) {
         cellColorBtns[i].color = cellColorOptions[i];
         cellColorBtns[i].hoverColor = cellColorOptions[i];
     }
+
+    // нопка сброса фазового врага (расположим позже при отрисовке, но инициализируем здесь)
+    phaseEnemyResetBtn = (Rectangle){ 10, GetScreenHeight() - 140, 60, 30 };
 }
 
 void RecalculateButtons(void) {
@@ -283,17 +295,50 @@ void UpdateGenerator(void) {
         generatorCharge += GENERATOR_CHARGE_RATE * dt;
         if (generatorCharge >= 100.0f) {
             generatorCharge = 100.0f;
-            if (!gameLost) gameLost = true; // перегрузка
+            if (!gameLost) gameLost = true;
         }
     } else {
         generatorCharge -= GENERATOR_DISCHARGE_RATE * dt;
         if (generatorCharge <= 0.0f) {
             generatorCharge = 0.0f;
-            if (!gameLost) gameLost = true; // разряд
+            if (!gameLost) gameLost = true;
         }
     }
-    // редупреждение о высоком заряде (для мигания)
     generatorWarning = (generatorCharge >= 90.0f);
+}
+
+void UpdatePhaseEnemy(void) {
+    if (cheatActive) {
+        phaseEnemyPhase = 1;
+        phaseEnemyTimer = 0.0;
+        return;
+    }
+
+    // сли игра уже проиграна/выиграна, враг не прогрессирует
+    if (gameLost || gameWon) return;
+
+    float dt = GetFrameTime();
+    phaseEnemyTimer += dt;
+
+    // роверяем, не нажата ли кнопка сброса (проверяется в UpdateGameplay)
+    if (phaseEnemyResetQueued) {
+        if (generatorCharge >= 20.0f) {
+            generatorCharge -= 20.0f;
+            phaseEnemyPhase = 1;
+            phaseEnemyTimer = 0.0;
+        } // если энергии недостаточно, сброс не происходит (можно добавить звук/уведомление, но пока просто игнорируем)
+        phaseEnemyResetQueued = false;
+    }
+
+    // ереход на следующую фазу, если накопилось время
+    if (phaseEnemyTimer >= PHASE_TRANSITION_TIME && phaseEnemyPhase < 5) {
+        phaseEnemyPhase++;
+        phaseEnemyTimer = 0.0;
+        if (phaseEnemyPhase >= 5) {
+            // остигли 5-й фазы – проигрыш
+            if (!gameLost) gameLost = true;
+        }
+    }
 }
 
 void UpdateMenu(void) {
@@ -359,6 +404,15 @@ void UpdateGameplay(void) {
 
     if (!gameLost && !gameWon) {
         UpdateGenerator();
+        UpdatePhaseEnemy();
+
+        // роверка кнопки сброса фазового врага
+        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+            Vector2 mouse = GetMousePosition();
+            if (CheckCollisionPointRec(mouse, phaseEnemyResetBtn)) {
+                phaseEnemyResetQueued = true;
+            }
+        }
     }
 
     if (gameLost || gameWon) {
@@ -418,7 +472,7 @@ void UpdateGameplay(void) {
 }
 
 void DrawGameplay(void) {
-    // --- ерхняя панель ---
+    // ерхняя панель
     int minesLeft = gameConfig.mines - flagCount;
     if (minesLeft < 0) minesLeft = 0;
     char mineStr[16];
@@ -435,7 +489,7 @@ void DrawGameplay(void) {
     DrawRectangleLinesEx(smileyRect, 2, WHITE);
     DrawText(":)", (int)(smileyRect.x + 8), (int)(smileyRect.y + 6), 24, BLACK);
 
-    // --- гровое поле ---
+    // гровое поле
     DrawRectangle(gridX - 5, gridY - 5,
                   gameBoard.cols * cellSize + 10, gameBoard.rows * cellSize + 10,
                   bgColor);
@@ -469,18 +523,16 @@ void DrawGameplay(void) {
         }
     }
 
-    // --- анель генератора (левый нижний угол) ---
+    // енератор (левый нижний угол)
     Rectangle genPanel = { 10, GetScreenHeight() - 70, 150, 60 };
     DrawRectangleRec(genPanel, Fade(BLACK, 0.7f));
     DrawRectangleLinesEx(genPanel, 2, WHITE);
 
-    // Цвет полоски заряда в зависимости от уровня
     Color chargeColor;
     if (generatorCharge > 80) chargeColor = RED;
     else if (generatorCharge > 40) chargeColor = YELLOW;
     else chargeColor = GREEN;
 
-    // игание при высоком заряде (>= 90%)
     if (generatorWarning) {
         double t = GetTime();
         if (((int)(t * 4) % 2) == 0) {
@@ -488,7 +540,6 @@ void DrawGameplay(void) {
         }
     }
 
-    // Текст "GENERATOR" и процент
     DrawText("GENERATOR", (int)genPanel.x + 10, (int)genPanel.y + 5, 14, LIGHTGRAY);
     char genStr[16];
     sprintf(genStr, "%.0f%%", generatorCharge);
@@ -496,12 +547,24 @@ void DrawGameplay(void) {
     int textW = MeasureText(genStr, fontSize);
     DrawText(genStr, (int)(genPanel.x + genPanel.width/2 - textW/2), (int)(genPanel.y + 25), fontSize, chargeColor);
 
+    // Фазовый враг (заглушка: только кнопка и номер фазы)
+    Rectangle phasePanel = { 10, GetScreenHeight() - 150, 150, 60 };
+    DrawRectangleRec(phasePanel, Fade(BLACK, 0.7f));
+    DrawRectangleLinesEx(phasePanel, 2, WHITE);
+    DrawText("PHASE", (int)phasePanel.x + 10, (int)phasePanel.y + 5, 14, LIGHTGRAY);
+    char phaseStr[8];
+    sprintf(phaseStr, "%d/5", phaseEnemyPhase);
+    DrawText(phaseStr, (int)(phasePanel.x + phasePanel.width/2 - MeasureText(phaseStr, 20)/2), (int)(phasePanel.y + 25), 20, WHITE);
+    // нопка сброса
+    DrawRectangleRec(phaseEnemyResetBtn, GRAY);
+    DrawRectangleLinesEx(phaseEnemyResetBtn, 1, WHITE);
+    DrawText("<<", (int)(phaseEnemyResetBtn.x + 12), (int)(phaseEnemyResetBtn.y + 5), 18, WHITE);
+
     // езультат игры
     if (gameLost) DrawText("YOU LOST! (ENTER to menu)", GetScreenWidth()/2 - MeasureText("YOU LOST! (ENTER to menu)", 30)/2, 45, 30, RED);
     else if (gameWon) DrawText("YOU WIN! (ENTER to menu)", GetScreenWidth()/2 - MeasureText("YOU WIN! (ENTER to menu)", 30)/2, 45, 30, GREEN);
 }
 
-// --- стальные экраны (без изменений) ---
 void UpdateSettings(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         for (int i = 0; i < 4; i++) {
