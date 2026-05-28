@@ -57,11 +57,11 @@ int cellSize = 30;
 int gridX = 50;
 int gridY = 80;
 
-// --- енератор ---
-float generatorCharge = 50.0f;   // 0..100
-const float GENERATOR_CHARGE_RATE = 25.0f;   // % в секунду при зажатии Shift
-const float GENERATOR_DISCHARGE_RATE = 3.0f; // % в секунду пассивной разрядки
-bool generatorMessage = false;   // для мигающего предупреждения (позже)
+// енератор
+float generatorCharge = 50.0f;
+const float GENERATOR_CHARGE_RATE = 25.0f;
+const float GENERATOR_DISCHARGE_RATE = 3.0f;
+bool generatorWarning = false;   // мигание при >= 90%
 
 Button newGameBtn;
 Button settingsBtn;
@@ -144,7 +144,7 @@ void ResetGame(void) {
     startTime = 0.0;
     gameEndCounted = false;
     gamesPlayed++;
-    generatorCharge = 50.0f;      // сброс генератора
+    generatorCharge = 50.0f;
     RecalculateGrid();
 }
 
@@ -271,33 +271,31 @@ void UpdateCheatInput(void) {
     }
 }
 
-// бновление генератора
 void UpdateGenerator(void) {
     if (cheatActive) {
         generatorCharge = 100.0f;
+        generatorWarning = false;
         return;
     }
 
     float dt = GetFrameTime();
     if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) {
-        // аряжаем
         generatorCharge += GENERATOR_CHARGE_RATE * dt;
         if (generatorCharge >= 100.0f) {
             generatorCharge = 100.0f;
-            // ерегрузка — проигрыш
-            if (!gameLost) gameLost = true;
+            if (!gameLost) gameLost = true; // перегрузка
         }
     } else {
-        // ассивная разрядка
         generatorCharge -= GENERATOR_DISCHARGE_RATE * dt;
         if (generatorCharge <= 0.0f) {
             generatorCharge = 0.0f;
-            if (!gameLost) gameLost = true;   // разряд
+            if (!gameLost) gameLost = true; // разряд
         }
     }
+    // редупреждение о высоком заряде (для мигания)
+    generatorWarning = (generatorCharge >= 90.0f);
 }
 
-// ---------------------------------------------------------------------------
 void UpdateMenu(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         if (IsMouseOverButton(newGameBtn)) currentScreen = SCREEN_DIFFICULTY;
@@ -359,12 +357,10 @@ void UpdateGameplay(void) {
         RecalculateButtons();
     }
 
-    // бновляем генератор только в активной игре и не после завершения
     if (!gameLost && !gameWon) {
         UpdateGenerator();
     }
 
-    // сли игра уже завершилась (в том числе из-за генератора), обрабатываем учёт и выход
     if (gameLost || gameWon) {
         if (!gameEndCounted) {
             if (gameLost) gamesLost++;
@@ -374,7 +370,6 @@ void UpdateGameplay(void) {
         if (IsKeyPressed(KEY_ENTER)) currentScreen = SCREEN_MENU;
         return;
     }
-
     if (IsKeyPressed(KEY_ESCAPE)) currentScreen = SCREEN_MENU;
 
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
@@ -423,6 +418,7 @@ void UpdateGameplay(void) {
 }
 
 void DrawGameplay(void) {
+    // --- ерхняя панель ---
     int minesLeft = gameConfig.mines - flagCount;
     if (minesLeft < 0) minesLeft = 0;
     char mineStr[16];
@@ -439,6 +435,7 @@ void DrawGameplay(void) {
     DrawRectangleLinesEx(smileyRect, 2, WHITE);
     DrawText(":)", (int)(smileyRect.x + 8), (int)(smileyRect.y + 6), 24, BLACK);
 
+    // --- гровое поле ---
     DrawRectangle(gridX - 5, gridY - 5,
                   gameBoard.cols * cellSize + 10, gameBoard.rows * cellSize + 10,
                   bgColor);
@@ -472,13 +469,39 @@ void DrawGameplay(void) {
         }
     }
 
-    // аглушка для генератора (пока просто текст)
-    DrawText("GENERATOR", 10, GetScreenHeight() - 60, 20, WHITE);
+    // --- анель генератора (левый нижний угол) ---
+    Rectangle genPanel = { 10, GetScreenHeight() - 70, 150, 60 };
+    DrawRectangleRec(genPanel, Fade(BLACK, 0.7f));
+    DrawRectangleLinesEx(genPanel, 2, WHITE);
 
+    // Цвет полоски заряда в зависимости от уровня
+    Color chargeColor;
+    if (generatorCharge > 80) chargeColor = RED;
+    else if (generatorCharge > 40) chargeColor = YELLOW;
+    else chargeColor = GREEN;
+
+    // игание при высоком заряде (>= 90%)
+    if (generatorWarning) {
+        double t = GetTime();
+        if (((int)(t * 4) % 2) == 0) {
+            DrawRectangleRec(genPanel, Fade(RED, 0.3f));
+        }
+    }
+
+    // Текст "GENERATOR" и процент
+    DrawText("GENERATOR", (int)genPanel.x + 10, (int)genPanel.y + 5, 14, LIGHTGRAY);
+    char genStr[16];
+    sprintf(genStr, "%.0f%%", generatorCharge);
+    int fontSize = 20;
+    int textW = MeasureText(genStr, fontSize);
+    DrawText(genStr, (int)(genPanel.x + genPanel.width/2 - textW/2), (int)(genPanel.y + 25), fontSize, chargeColor);
+
+    // езультат игры
     if (gameLost) DrawText("YOU LOST! (ENTER to menu)", GetScreenWidth()/2 - MeasureText("YOU LOST! (ENTER to menu)", 30)/2, 45, 30, RED);
     else if (gameWon) DrawText("YOU WIN! (ENTER to menu)", GetScreenWidth()/2 - MeasureText("YOU WIN! (ENTER to menu)", 30)/2, 45, 30, GREEN);
 }
 
+// --- стальные экраны (без изменений) ---
 void UpdateSettings(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         for (int i = 0; i < 4; i++) {
