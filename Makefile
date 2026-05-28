@@ -16,8 +16,14 @@ $(TARGET): $(OBJ)
 %.o: %.c
 	$(CC) -c $(INCLUDES) $(CFLAGS) $< -o $@
 
-test:
-	@echo "No tests yet"
+# одульные тесты
+TEST_SRC = tests/test_board.c board.c tests/unity.c
+TEST_TARGET = test_runner.exe
+
+test: $(TEST_SRC)
+	$(CC) $(TEST_SRC) -I. -Itests $(CFLAGS) -o $(TEST_TARGET)
+	./$(TEST_TARGET)
+	rm -f $(TEST_TARGET)
 
 clean:
-	rm -f $(OBJ) $(TARGET)
+	rm -f $(OBJ) $(TARGET) $(TEST_TARGET)
