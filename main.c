@@ -1,6 +1,7 @@
 ﻿#include "raylib.h"
 #include "board.h"
 #include <stdio.h>
+#include <string.h>
 
 typedef enum {
     SCREEN_MENU,
@@ -46,6 +47,9 @@ int gamesWon = 0;
 int gamesLost = 0;
 bool gameEndCounted = false;
 
+bool cheatActive = false;
+char inputBuffer[6] = "";
+
 Button newGameBtn;
 Button settingsBtn;
 Button statsBtn;
@@ -59,7 +63,6 @@ Button backBtn;
 Button backFromSettingsBtn;
 Button bgColorBtns[4];
 Button cellColorBtns[4];
-
 Button backFromStatsBtn;
 
 Rectangle smileyRect;
@@ -182,6 +185,22 @@ void DrawButton(Button btn) {
     DrawText(btn.text, (int)textX, (int)textY, 20, WHITE);
 }
 
+void UpdateCheatInput(void) {
+    int key = GetKeyPressed();
+    if (key >= 65 && key <= 90) {
+        char c = (char)key;
+        memmove(inputBuffer, inputBuffer + 1, 4);
+        inputBuffer[4] = c;
+        inputBuffer[5] = '\0';
+
+        if (strcmp(inputBuffer, "IDDQD") == 0) {
+            cheatActive = !cheatActive;
+            inputBuffer[0] = '\0';
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 void UpdateMenu(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         if (IsMouseOverButton(newGameBtn)) {
@@ -329,6 +348,15 @@ void DrawGameplay(void) {
             if (cell.state == CELL_HIDDEN) {
                 DrawRectangleRec(cellRect, cellColor);
                 DrawRectangleLines((int)cellRect.x, (int)cellRect.y, CELL_SIZE, CELL_SIZE, cellHiddenLine);
+
+                // ит-индикаторы на скрытых клетках
+                if (cheatActive) {
+                    if (cell.hasMine) {
+                        DrawCircle((int)(cellRect.x + CELL_SIZE/2), (int)(cellRect.y + CELL_SIZE/2), 5, RED);
+                    } else {
+                        DrawCircle((int)(cellRect.x + CELL_SIZE/2), (int)(cellRect.y + CELL_SIZE/2), 5, GREEN);
+                    }
+                }
             } else if (cell.state == CELL_REVEALED) {
                 DrawRectangleRec(cellRect, WHITE);
                 DrawRectangleLines((int)cellRect.x, (int)cellRect.y, CELL_SIZE, CELL_SIZE, GRAY);
@@ -389,8 +417,6 @@ void DrawSettings(void) {
     DrawButton(backFromSettingsBtn);
 }
 
-// ---------------------------------------------------------------------------
-// Обновлённый экран статистики
 void UpdateStats(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         if (IsMouseOverButton(backFromStatsBtn)) {
@@ -414,7 +440,6 @@ void DrawStats(void) {
     sprintf(loseStr, "Losses: %d", gamesLost);
     DrawText(loseStr, 250, 260, 24, RED);
 
-    // Процент побед (если были игры)
     if (gamesPlayed > 0) {
         float winRate = (float)gamesWon / gamesPlayed * 100.0f;
         char rateStr[32];
@@ -427,7 +452,6 @@ void DrawStats(void) {
     DrawButton(backFromStatsBtn);
 }
 
-// ---------------------------------------------------------------------------
 void UpdateMinigame(void) { if (IsKeyPressed(KEY_ESCAPE)) currentScreen = SCREEN_GAMEPLAY; }
 void DrawMinigame(void) { DrawText("MINIGAME", 100, 100, 30, WHITE); }
 void UpdateGameOver(void) { if (IsKeyPressed(KEY_ENTER)) currentScreen = SCREEN_MENU; }
@@ -443,6 +467,8 @@ int main(void)
 
     while (!WindowShouldClose())
     {
+        UpdateCheatInput();
+
         switch (currentScreen) {
             case SCREEN_MENU:       UpdateMenu();       break;
             case SCREEN_DIFFICULTY: UpdateDifficulty(); break;
