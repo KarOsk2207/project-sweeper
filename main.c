@@ -3,7 +3,6 @@
 #include <stdio.h>
 
 // ---------------------------------------------------------------------------
-// Перечисление экранов
 typedef enum {
     SCREEN_MENU,
     SCREEN_DIFFICULTY,
@@ -11,11 +10,9 @@ typedef enum {
     SCREEN_MINIGAME,
     SCREEN_GAME_OVER,
     SCREEN_VICTORY,
-    SCREEN_SETTINGS   // новый экран
+    SCREEN_SETTINGS
 } GameScreen;
 
-// ---------------------------------------------------------------------------
-// Структура для кнопки
 typedef struct {
     Rectangle bounds;
     const char *text;
@@ -23,8 +20,6 @@ typedef struct {
     Color hoverColor;
 } Button;
 
-// ---------------------------------------------------------------------------
-// Параметры игры
 typedef struct {
     int rows;
     int cols;
@@ -44,9 +39,14 @@ int timer = 0;
 double startTime = 0.0;
 bool timerStarted = false;
 
+// Кастомизация
+Color bgColor = DARKGRAY;       // цвет фона игры
+Color cellColor = LIGHTGRAY;    // цвет скрытых клеток
+Color cellHiddenLine = GRAY;    // цвет линий скрытых клеток
+
 // Кнопки меню
 Button newGameBtn;
-Button settingsBtn;   // новая кнопка
+Button settingsBtn;
 Button exitBtn;
 
 // Кнопки сложности
@@ -55,20 +55,33 @@ Button mediumBtn;
 Button hardBtn;
 Button backBtn;
 
-// Кнопка-смайлик (рестарт)
+// Кнопки настроек
+Button backFromSettingsBtn;
+Button bgColorBtns[4];
+Button cellColorBtns[4];
+
 Rectangle smileyRect;
 
-// Кнопки экрана настроек
-Button backFromSettingsBtn;
+// Предопределённые цвета для выбора
+Color bgColorOptions[4] = {
+    { 80, 80, 80, 255 },   // Dark Gray
+    { 20, 20, 20, 255 },   // Almost Black
+    { 10, 10, 50, 255 },   // Dark Navy
+    { 10, 50, 10, 255 }    // Dark Green
+};
 
-// ---------------------------------------------------------------------------
-// Константы отрисовки
+Color cellColorOptions[4] = {
+    { 200, 200, 200, 255 }, // Light Gray
+    { 255, 255, 255, 255 }, // White
+    { 180, 200, 255, 255 }, // Light Blue
+    { 180, 255, 180, 255 }  // Light Green
+};
+
 #define CELL_SIZE  30
 #define GRID_X     50
 #define GRID_Y     80
 
 // ---------------------------------------------------------------------------
-// Сброс игры
 void ResetGame(void) {
     BoardInit(&gameBoard, gameConfig.rows, gameConfig.cols, gameConfig.mines);
     gameLost = false;
@@ -80,7 +93,6 @@ void ResetGame(void) {
 }
 
 // ---------------------------------------------------------------------------
-// Инициализация кнопок меню
 void InitMenuButtons(void) {
     float btnWidth = 200, btnHeight = 50;
     float centerX = (800 - btnWidth) / 2.0f;
@@ -126,14 +138,31 @@ void InitDifficultyButtons(void) {
     backBtn.hoverColor = GRAY;
 
     // Кнопка Back на экране настроек
-    backFromSettingsBtn.bounds = (Rectangle){ centerX, 420, btnWidth, btnHeight };
+    backFromSettingsBtn.bounds = (Rectangle){ centerX, 480, btnWidth, btnHeight };
     backFromSettingsBtn.text = "Back";
     backFromSettingsBtn.color = DARKGRAY;
     backFromSettingsBtn.hoverColor = GRAY;
+
+    // Кнопки выбора цветов фона
+    float smallBtnW = 100, smallBtnH = 40;
+    float startX = 200;
+    for (int i = 0; i < 4; i++) {
+        bgColorBtns[i].bounds = (Rectangle){ startX + i * 110, 200, smallBtnW, smallBtnH };
+        bgColorBtns[i].text = "";  // цвет покажет заливка
+        bgColorBtns[i].color = bgColorOptions[i];
+        bgColorBtns[i].hoverColor = bgColorOptions[i];  // без изменения
+    }
+
+    // Кнопки выбора цветов ячеек
+    for (int i = 0; i < 4; i++) {
+        cellColorBtns[i].bounds = (Rectangle){ startX + i * 110, 300, smallBtnW, smallBtnH };
+        cellColorBtns[i].text = "";
+        cellColorBtns[i].color = cellColorOptions[i];
+        cellColorBtns[i].hoverColor = cellColorOptions[i];
+    }
 }
 
 // ---------------------------------------------------------------------------
-// Вспомогательные функции кнопок
 bool IsMouseOverButton(Button btn) {
     return CheckCollisionPointRec(GetMousePosition(), btn.bounds);
 }
@@ -150,7 +179,6 @@ void DrawButton(Button btn) {
 }
 
 // ---------------------------------------------------------------------------
-// Главное меню
 void UpdateMenu(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         if (IsMouseOverButton(newGameBtn)) {
@@ -173,7 +201,6 @@ void DrawMenu(void) {
 }
 
 // ---------------------------------------------------------------------------
-// Меню выбора сложности
 void UpdateDifficulty(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         if (IsMouseOverButton(easyBtn)) {
@@ -206,13 +233,11 @@ void DrawDifficulty(void) {
 }
 
 // ---------------------------------------------------------------------------
-// Игровой процесс (Сапёр)
 void UpdateGameplay(void) {
     if (gameLost || gameWon) {
         if (IsKeyPressed(KEY_ENTER)) currentScreen = SCREEN_MENU;
         return;
     }
-
     if (IsKeyPressed(KEY_ESCAPE)) currentScreen = SCREEN_MENU;
 
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
@@ -237,11 +262,8 @@ void UpdateGameplay(void) {
                     startTime = GetTime();
                 }
                 bool hitMine = BoardReveal(&gameBoard, row, col);
-                if (hitMine) {
-                    gameLost = true;
-                } else {
-                    gameWon = BoardCheckVictory(&gameBoard);
-                }
+                if (hitMine) gameLost = true;
+                else gameWon = BoardCheckVictory(&gameBoard);
             } else if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
                 if (!gameBoard.firstClickDone) return;
                 Cell* cell = &gameBoard.cells[row][col];
@@ -281,6 +303,11 @@ void DrawGameplay(void) {
     DrawRectangleLinesEx(smileyRect, 2, WHITE);
     DrawText(":)", (int)(smileyRect.x + 8), (int)(smileyRect.y + 6), 24, BLACK);
 
+    // Фон игры (подложка под сетку) — используем кастомный bgColor
+    DrawRectangle(GRID_X - 5, GRID_Y - 5,
+                  gameBoard.cols * CELL_SIZE + 10, gameBoard.rows * CELL_SIZE + 10,
+                  bgColor);
+
     // Сетка
     for (int r = 0; r < gameBoard.rows; r++) {
         for (int c = 0; c < gameBoard.cols; c++) {
@@ -293,8 +320,8 @@ void DrawGameplay(void) {
             Cell cell = gameBoard.cells[r][c];
 
             if (cell.state == CELL_HIDDEN) {
-                DrawRectangleRec(cellRect, LIGHTGRAY);
-                DrawRectangleLines((int)cellRect.x, (int)cellRect.y, CELL_SIZE, CELL_SIZE, GRAY);
+                DrawRectangleRec(cellRect, cellColor);
+                DrawRectangleLines((int)cellRect.x, (int)cellRect.y, CELL_SIZE, CELL_SIZE, cellHiddenLine);
             } else if (cell.state == CELL_REVEALED) {
                 DrawRectangleRec(cellRect, WHITE);
                 DrawRectangleLines((int)cellRect.x, (int)cellRect.y, CELL_SIZE, CELL_SIZE, GRAY);
@@ -306,8 +333,8 @@ void DrawGameplay(void) {
                     DrawText(num, (int)(cellRect.x + 8), (int)(cellRect.y + 5), 24, DARKBLUE);
                 }
             } else if (cell.state == CELL_FLAGGED) {
-                DrawRectangleRec(cellRect, LIGHTGRAY);
-                DrawRectangleLines((int)cellRect.x, (int)cellRect.y, CELL_SIZE, CELL_SIZE, GRAY);
+                DrawRectangleRec(cellRect, cellColor);
+                DrawRectangleLines((int)cellRect.x, (int)cellRect.y, CELL_SIZE, CELL_SIZE, cellHiddenLine);
                 DrawText("F", (int)(cellRect.x + 8), (int)(cellRect.y + 5), 24, RED);
             }
         }
@@ -321,9 +348,21 @@ void DrawGameplay(void) {
 }
 
 // ---------------------------------------------------------------------------
-// Экран настроек (пока заглушка)
 void UpdateSettings(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        for (int i = 0; i < 4; i++) {
+            if (IsMouseOverButton(bgColorBtns[i])) {
+                bgColor = bgColorOptions[i];
+            }
+            if (IsMouseOverButton(cellColorBtns[i])) {
+                cellColor = cellColorOptions[i];
+                // Автоматически подбираем линию чуть темнее
+                cellHiddenLine.r = (unsigned char)(cellColor.r * 0.6f);
+                cellHiddenLine.g = (unsigned char)(cellColor.g * 0.6f);
+                cellHiddenLine.b = (unsigned char)(cellColor.b * 0.6f);
+                cellHiddenLine.a = 255;
+            }
+        }
         if (IsMouseOverButton(backFromSettingsBtn)) {
             currentScreen = SCREEN_MENU;
         }
@@ -331,43 +370,47 @@ void UpdateSettings(void) {
 }
 
 void DrawSettings(void) {
-    DrawText("SETTINGS", 300, 100, 40, WHITE);
-    DrawText("Customization options coming soon...", 180, 200, 20, LIGHTGRAY);
+    DrawText("SETTINGS", 300, 80, 40, WHITE);
+
+    DrawText("Background Color:", 200, 170, 20, LIGHTGRAY);
+    for (int i = 0; i < 4; i++) {
+        DrawRectangleRec(bgColorBtns[i].bounds, bgColorBtns[i].color);
+        DrawRectangleLinesEx(bgColorBtns[i].bounds, 2, (i == 0 && bgColor.r == bgColorOptions[0].r) ? RED : WHITE);
+    }
+
+    DrawText("Cell Color:", 200, 270, 20, LIGHTGRAY);
+    for (int i = 0; i < 4; i++) {
+        DrawRectangleRec(cellColorBtns[i].bounds, cellColorBtns[i].color);
+        DrawRectangleLinesEx(cellColorBtns[i].bounds, 2, (i == 0 && cellColor.r == cellColorOptions[0].r) ? RED : WHITE);
+    }
+
     DrawButton(backFromSettingsBtn);
 }
 
 // ---------------------------------------------------------------------------
-// Заглушки для мини-игр и финалов
 void UpdateMinigame(void) {
     if (IsKeyPressed(KEY_ESCAPE)) currentScreen = SCREEN_GAMEPLAY;
 }
-
 void DrawMinigame(void) {
     DrawText("MINIGAME", 100, 100, 30, WHITE);
 }
-
 void UpdateGameOver(void) {
     if (IsKeyPressed(KEY_ENTER)) currentScreen = SCREEN_MENU;
 }
-
 void DrawGameOver(void) {
     DrawText("GAME OVER (press ENTER to menu)", 100, 100, 30, RED);
 }
-
 void UpdateVictory(void) {
     if (IsKeyPressed(KEY_ENTER)) currentScreen = SCREEN_MENU;
 }
-
 void DrawVictory(void) {
     DrawText("VICTORY! (press ENTER to menu)", 100, 100, 30, GREEN);
 }
 
 // ---------------------------------------------------------------------------
-// Главная функция
 int main(void)
 {
     InitWindow(800, 600, "Sweeper");
-
     InitMenuButtons();
     InitDifficultyButtons();
 
