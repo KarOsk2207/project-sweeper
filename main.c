@@ -2,7 +2,6 @@
 #include "board.h"
 #include <stdio.h>
 
-// ---------------------------------------------------------------------------
 typedef enum {
     SCREEN_MENU,
     SCREEN_DIFFICULTY,
@@ -10,7 +9,8 @@ typedef enum {
     SCREEN_MINIGAME,
     SCREEN_GAME_OVER,
     SCREEN_VICTORY,
-    SCREEN_SETTINGS
+    SCREEN_SETTINGS,
+    SCREEN_STATS
 } GameScreen;
 
 typedef struct {
@@ -26,8 +26,6 @@ typedef struct {
     int mines;
 } GameConfig;
 
-// ---------------------------------------------------------------------------
-// Глобальные переменные
 GameScreen currentScreen = SCREEN_MENU;
 GameConfig gameConfig;
 Board gameBoard;
@@ -39,49 +37,51 @@ int timer = 0;
 double startTime = 0.0;
 bool timerStarted = false;
 
-// Кастомизация
-Color bgColor = DARKGRAY;       // цвет фона игры
-Color cellColor = LIGHTGRAY;    // цвет скрытых клеток
-Color cellHiddenLine = GRAY;    // цвет линий скрытых клеток
+Color bgColor = DARKGRAY;
+Color cellColor = LIGHTGRAY;
+Color cellHiddenLine = GRAY;
 
-// Кнопки меню
+int gamesPlayed = 0;
+int gamesWon = 0;
+int gamesLost = 0;
+bool gameEndCounted = false;
+
 Button newGameBtn;
 Button settingsBtn;
+Button statsBtn;
 Button exitBtn;
 
-// Кнопки сложности
 Button easyBtn;
 Button mediumBtn;
 Button hardBtn;
 Button backBtn;
 
-// Кнопки настроек
 Button backFromSettingsBtn;
 Button bgColorBtns[4];
 Button cellColorBtns[4];
 
+Button backFromStatsBtn;
+
 Rectangle smileyRect;
 
-// Предопределённые цвета для выбора
 Color bgColorOptions[4] = {
-    { 80, 80, 80, 255 },   // Dark Gray
-    { 20, 20, 20, 255 },   // Almost Black
-    { 10, 10, 50, 255 },   // Dark Navy
-    { 10, 50, 10, 255 }    // Dark Green
+    { 80, 80, 80, 255 },
+    { 20, 20, 20, 255 },
+    { 10, 10, 50, 255 },
+    { 10, 50, 10, 255 }
 };
 
 Color cellColorOptions[4] = {
-    { 200, 200, 200, 255 }, // Light Gray
-    { 255, 255, 255, 255 }, // White
-    { 180, 200, 255, 255 }, // Light Blue
-    { 180, 255, 180, 255 }  // Light Green
+    { 200, 200, 200, 255 },
+    { 255, 255, 255, 255 },
+    { 180, 200, 255, 255 },
+    { 180, 255, 180, 255 }
 };
 
 #define CELL_SIZE  30
 #define GRID_X     50
 #define GRID_Y     80
 
-// ---------------------------------------------------------------------------
 void ResetGame(void) {
     BoardInit(&gameBoard, gameConfig.rows, gameConfig.cols, gameConfig.mines);
     gameLost = false;
@@ -90,24 +90,30 @@ void ResetGame(void) {
     timer = 0;
     timerStarted = false;
     startTime = 0.0;
+    gameEndCounted = false;
+    gamesPlayed++;
 }
 
-// ---------------------------------------------------------------------------
 void InitMenuButtons(void) {
     float btnWidth = 200, btnHeight = 50;
     float centerX = (800 - btnWidth) / 2.0f;
 
-    newGameBtn.bounds = (Rectangle){ centerX, 200, btnWidth, btnHeight };
+    newGameBtn.bounds = (Rectangle){ centerX, 160, btnWidth, btnHeight };
     newGameBtn.text = "New Game";
     newGameBtn.color = DARKGREEN;
     newGameBtn.hoverColor = GREEN;
 
-    settingsBtn.bounds = (Rectangle){ centerX, 270, btnWidth, btnHeight };
+    settingsBtn.bounds = (Rectangle){ centerX, 230, btnWidth, btnHeight };
     settingsBtn.text = "Settings";
     settingsBtn.color = DARKBLUE;
     settingsBtn.hoverColor = BLUE;
 
-    exitBtn.bounds = (Rectangle){ centerX, 340, btnWidth, btnHeight };
+    statsBtn.bounds = (Rectangle){ centerX, 300, btnWidth, btnHeight };
+    statsBtn.text = "Stats";
+    statsBtn.color = DARKPURPLE;
+    statsBtn.hoverColor = PURPLE;
+
+    exitBtn.bounds = (Rectangle){ centerX, 370, btnWidth, btnHeight };
     exitBtn.text = "Exit";
     exitBtn.color = DARKGRAY;
     exitBtn.hoverColor = GRAY;
@@ -137,23 +143,22 @@ void InitDifficultyButtons(void) {
     backBtn.color = DARKGRAY;
     backBtn.hoverColor = GRAY;
 
-    // Кнопка Back на экране настроек
     backFromSettingsBtn.bounds = (Rectangle){ centerX, 480, btnWidth, btnHeight };
     backFromSettingsBtn.text = "Back";
     backFromSettingsBtn.color = DARKGRAY;
     backFromSettingsBtn.hoverColor = GRAY;
 
-    // Кнопки выбора цветов фона
+    backFromStatsBtn = backFromSettingsBtn;
+
     float smallBtnW = 100, smallBtnH = 40;
     float startX = 200;
     for (int i = 0; i < 4; i++) {
         bgColorBtns[i].bounds = (Rectangle){ startX + i * 110, 200, smallBtnW, smallBtnH };
-        bgColorBtns[i].text = "";  // цвет покажет заливка
+        bgColorBtns[i].text = "";
         bgColorBtns[i].color = bgColorOptions[i];
-        bgColorBtns[i].hoverColor = bgColorOptions[i];  // без изменения
+        bgColorBtns[i].hoverColor = bgColorOptions[i];
     }
 
-    // Кнопки выбора цветов ячеек
     for (int i = 0; i < 4; i++) {
         cellColorBtns[i].bounds = (Rectangle){ startX + i * 110, 300, smallBtnW, smallBtnH };
         cellColorBtns[i].text = "";
@@ -162,7 +167,6 @@ void InitDifficultyButtons(void) {
     }
 }
 
-// ---------------------------------------------------------------------------
 bool IsMouseOverButton(Button btn) {
     return CheckCollisionPointRec(GetMousePosition(), btn.bounds);
 }
@@ -178,7 +182,6 @@ void DrawButton(Button btn) {
     DrawText(btn.text, (int)textX, (int)textY, 20, WHITE);
 }
 
-// ---------------------------------------------------------------------------
 void UpdateMenu(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         if (IsMouseOverButton(newGameBtn)) {
@@ -187,6 +190,9 @@ void UpdateMenu(void) {
         if (IsMouseOverButton(settingsBtn)) {
             currentScreen = SCREEN_SETTINGS;
         }
+        if (IsMouseOverButton(statsBtn)) {
+            currentScreen = SCREEN_STATS;
+        }
         if (IsMouseOverButton(exitBtn)) {
             CloseWindow();
         }
@@ -194,13 +200,13 @@ void UpdateMenu(void) {
 }
 
 void DrawMenu(void) {
-    DrawText("SWEEPER", 300, 100, 50, WHITE);
+    DrawText("SWEEPER", 300, 60, 50, WHITE);
     DrawButton(newGameBtn);
     DrawButton(settingsBtn);
+    DrawButton(statsBtn);
     DrawButton(exitBtn);
 }
 
-// ---------------------------------------------------------------------------
 void UpdateDifficulty(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         if (IsMouseOverButton(easyBtn)) {
@@ -232,9 +238,13 @@ void DrawDifficulty(void) {
     DrawButton(backBtn);
 }
 
-// ---------------------------------------------------------------------------
 void UpdateGameplay(void) {
     if (gameLost || gameWon) {
+        if (!gameEndCounted) {
+            if (gameLost) gamesLost++;
+            else gamesWon++;
+            gameEndCounted = true;
+        }
         if (IsKeyPressed(KEY_ENTER)) currentScreen = SCREEN_MENU;
         return;
     }
@@ -286,7 +296,6 @@ void UpdateGameplay(void) {
 }
 
 void DrawGameplay(void) {
-    // Верхняя панель
     int minesLeft = gameConfig.mines - flagCount;
     if (minesLeft < 0) minesLeft = 0;
     char mineStr[16];
@@ -303,12 +312,10 @@ void DrawGameplay(void) {
     DrawRectangleLinesEx(smileyRect, 2, WHITE);
     DrawText(":)", (int)(smileyRect.x + 8), (int)(smileyRect.y + 6), 24, BLACK);
 
-    // Фон игры (подложка под сетку) — используем кастомный bgColor
     DrawRectangle(GRID_X - 5, GRID_Y - 5,
                   gameBoard.cols * CELL_SIZE + 10, gameBoard.rows * CELL_SIZE + 10,
                   bgColor);
 
-    // Сетка
     for (int r = 0; r < gameBoard.rows; r++) {
         for (int c = 0; c < gameBoard.cols; c++) {
             Rectangle cellRect = {
@@ -347,7 +354,6 @@ void DrawGameplay(void) {
     }
 }
 
-// ---------------------------------------------------------------------------
 void UpdateSettings(void) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         for (int i = 0; i < 4; i++) {
@@ -356,7 +362,6 @@ void UpdateSettings(void) {
             }
             if (IsMouseOverButton(cellColorBtns[i])) {
                 cellColor = cellColorOptions[i];
-                // Автоматически подбираем линию чуть темнее
                 cellHiddenLine.r = (unsigned char)(cellColor.r * 0.6f);
                 cellHiddenLine.g = (unsigned char)(cellColor.g * 0.6f);
                 cellHiddenLine.b = (unsigned char)(cellColor.b * 0.6f);
@@ -371,43 +376,65 @@ void UpdateSettings(void) {
 
 void DrawSettings(void) {
     DrawText("SETTINGS", 300, 80, 40, WHITE);
-
     DrawText("Background Color:", 200, 170, 20, LIGHTGRAY);
     for (int i = 0; i < 4; i++) {
         DrawRectangleRec(bgColorBtns[i].bounds, bgColorBtns[i].color);
-        DrawRectangleLinesEx(bgColorBtns[i].bounds, 2, (i == 0 && bgColor.r == bgColorOptions[0].r) ? RED : WHITE);
+        DrawRectangleLinesEx(bgColorBtns[i].bounds, 2, WHITE);
     }
-
     DrawText("Cell Color:", 200, 270, 20, LIGHTGRAY);
     for (int i = 0; i < 4; i++) {
         DrawRectangleRec(cellColorBtns[i].bounds, cellColorBtns[i].color);
-        DrawRectangleLinesEx(cellColorBtns[i].bounds, 2, (i == 0 && cellColor.r == cellColorOptions[0].r) ? RED : WHITE);
+        DrawRectangleLinesEx(cellColorBtns[i].bounds, 2, WHITE);
     }
-
     DrawButton(backFromSettingsBtn);
 }
 
 // ---------------------------------------------------------------------------
-void UpdateMinigame(void) {
-    if (IsKeyPressed(KEY_ESCAPE)) currentScreen = SCREEN_GAMEPLAY;
+// Обновлённый экран статистики
+void UpdateStats(void) {
+    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        if (IsMouseOverButton(backFromStatsBtn)) {
+            currentScreen = SCREEN_MENU;
+        }
+    }
 }
-void DrawMinigame(void) {
-    DrawText("MINIGAME", 100, 100, 30, WHITE);
-}
-void UpdateGameOver(void) {
-    if (IsKeyPressed(KEY_ENTER)) currentScreen = SCREEN_MENU;
-}
-void DrawGameOver(void) {
-    DrawText("GAME OVER (press ENTER to menu)", 100, 100, 30, RED);
-}
-void UpdateVictory(void) {
-    if (IsKeyPressed(KEY_ENTER)) currentScreen = SCREEN_MENU;
-}
-void DrawVictory(void) {
-    DrawText("VICTORY! (press ENTER to menu)", 100, 100, 30, GREEN);
+
+void DrawStats(void) {
+    DrawText("STATISTICS", 280, 60, 40, WHITE);
+
+    char playStr[32];
+    sprintf(playStr, "Games played: %d", gamesPlayed);
+    DrawText(playStr, 250, 160, 24, WHITE);
+
+    char winStr[32];
+    sprintf(winStr, "Wins: %d", gamesWon);
+    DrawText(winStr, 250, 210, 24, GREEN);
+
+    char loseStr[32];
+    sprintf(loseStr, "Losses: %d", gamesLost);
+    DrawText(loseStr, 250, 260, 24, RED);
+
+    // Процент побед (если были игры)
+    if (gamesPlayed > 0) {
+        float winRate = (float)gamesWon / gamesPlayed * 100.0f;
+        char rateStr[32];
+        sprintf(rateStr, "Win rate: %.1f%%", winRate);
+        DrawText(rateStr, 250, 310, 24, YELLOW);
+    } else {
+        DrawText("Win rate: --", 250, 310, 24, LIGHTGRAY);
+    }
+
+    DrawButton(backFromStatsBtn);
 }
 
 // ---------------------------------------------------------------------------
+void UpdateMinigame(void) { if (IsKeyPressed(KEY_ESCAPE)) currentScreen = SCREEN_GAMEPLAY; }
+void DrawMinigame(void) { DrawText("MINIGAME", 100, 100, 30, WHITE); }
+void UpdateGameOver(void) { if (IsKeyPressed(KEY_ENTER)) currentScreen = SCREEN_MENU; }
+void DrawGameOver(void) { DrawText("GAME OVER (press ENTER to menu)", 100, 100, 30, RED); }
+void UpdateVictory(void) { if (IsKeyPressed(KEY_ENTER)) currentScreen = SCREEN_MENU; }
+void DrawVictory(void) { DrawText("VICTORY! (press ENTER to menu)", 100, 100, 30, GREEN); }
+
 int main(void)
 {
     InitWindow(800, 600, "Sweeper");
@@ -424,6 +451,7 @@ int main(void)
             case SCREEN_GAME_OVER:  UpdateGameOver();   break;
             case SCREEN_VICTORY:    UpdateVictory();    break;
             case SCREEN_SETTINGS:   UpdateSettings();   break;
+            case SCREEN_STATS:      UpdateStats();      break;
         }
 
         BeginDrawing();
@@ -437,6 +465,7 @@ int main(void)
             case SCREEN_GAME_OVER:  DrawGameOver();   break;
             case SCREEN_VICTORY:    DrawVictory();    break;
             case SCREEN_SETTINGS:   DrawSettings();   break;
+            case SCREEN_STATS:      DrawStats();      break;
         }
 
         EndDrawing();
